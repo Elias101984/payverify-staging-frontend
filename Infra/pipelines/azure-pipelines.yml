@@ -1,0 +1,59 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+
+# ============================================================
+# BUILD STAGE
+# ============================================================
+
+- stage: Build
+  jobs:
+    - job: BuildJob
+
+      steps:
+        - checkout: self
+
+        - task: NodeTool@0
+          inputs:
+            versionSpec: '20.x'
+
+        - script: |
+            npm install
+            npm run build
+          displayName: 'Install & Build'
+
+# ============================================================
+# DEV DEPLOYMENT
+# ============================================================
+
+- stage: Deploy_Dev
+  dependsOn: Build
+
+  jobs:
+    - deployment: DeployDev
+
+      environment: DEV
+
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+
+              - task: AzureCLI@2
+                inputs:
+                  azureSubscription: 'PayVerify-ServiceConnection'
+                  scriptType: bash
+                  scriptLocation: inlineScript
+
+                  inlineScript: |
+                    az deployment group create \
+                      --resource-group payverify-dev-rg \
+                      --template-file infra/bicep/main.bicep \
+                      --parameters @infra/bicep/main.parameters.dev.json

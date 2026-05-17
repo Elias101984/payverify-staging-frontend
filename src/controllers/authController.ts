@@ -95,10 +95,54 @@ export const register = async (req: Request, res: Response) => {
         );
 
         // 2) Create merchant
+        //const merchant = await Merchant.create(
+        //    {
+        //        name,
+        //        cac_number,
+        //        tin_number,
+        //        bvn,
+        //        account_number,
+        //        bank_name,
+        //        userId: newUser.id,
+        //    },
+        //    { transaction }
+        //);
+
+        // Generate a UNIQUE CAC for dev/testing ONLY
+        //const generatedCAC = `CAC-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+        //const merchant = await Merchant.create(
+        //    {
+        //        name,
+        //        cac_number: cac_number || generatedCAC, // ✅ fallback if missing
+        //        tin_number,
+        //        bvn,
+        //        account_number,
+        //        bank_name,
+        //        userId: newUser.id,
+        //    },
+        //    { transaction }
+        //);
+
+        // ======================================================
+        // FIX: Ensure CAC is NEVER "N/A" or duplicate
+        // ======================================================
+
+        // Treat invalid CAC values ("N/A", empty, null)
+        const isInvalidCAC =
+            !cac_number ||
+            cac_number === "N/A" ||
+            cac_number.trim() === "";
+
+        // Generate fallback ONLY if invalid
+        const finalCAC = isInvalidCAC
+            ? `CAC-${Date.now()}-${Math.floor(Math.random() * 10000)}`
+            : cac_number;
+
         const merchant = await Merchant.create(
             {
                 name,
-                cac_number,
+                cac_number: finalCAC, // ✅ ALWAYS SAFE + UNIQUE
                 tin_number,
                 bvn,
                 account_number,

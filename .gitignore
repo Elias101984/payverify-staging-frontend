@@ -70,3 +70,12 @@ swagger.yaml
 ####################################
 scripts/tmp/
 scripts/output/
+####################################
+# Environment Files
+####################################
+.env
+.env.*
+frontend/.env
+frontend/.env.*
+backend/.env
+backend/.env.*

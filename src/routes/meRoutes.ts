@@ -1,8 +1,8 @@
 ﻿// src/routes/meRoutes.ts
 import { Router, Request, Response } from 'express';
 import { Op } from 'sequelize';
-import { Merchant } from 'models/Merchant';
-import verifyJwtMiddleware from 'middlewares/authMiddleware'; // ✅ your middleware
+import { Merchant } from '../models/Merchant';
+import verifyJwtMiddleware from '../middlewares/authMiddleware'; // ✅ your middleware
 
 const router = Router();
 

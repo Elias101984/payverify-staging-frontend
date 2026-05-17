@@ -92,6 +92,37 @@ export const getMerchantCount = async (req: Request, res: Response) => {
     }
 };
 
+    // ----------------------------------------------------------------------------------
+    // GET CURRENT USER'S MERCHANT
+    // WHY:
+    // - Resolve merchantId from userId
+    // - Needed for PurchaseOrder creation
+    // ----------------------------------------------------------------------------------
+
+    export const getMyMerchant = async (req: any, res: any) => {
+        try {
+            const userId = req.user.id;
+
+            const merchant = await Merchant.findOne({
+                where: { userId }
+            });
+
+            if (!merchant) {
+                return res.status(404).json({
+                    message: "Merchant not found for this user"
+                });
+            }
+
+            return res.json(merchant);
+
+        } catch (error) {
+            console.error("getMyMerchant error:", error);
+            return res.status(500).json({
+                message: "Failed to fetch merchant"
+            });
+        }
+    };
+
 // -----------------------------------------------------------------------------
 // POST /api/merchants
 // Creates a new merchant, generates a QR code, uploads it, stores references,
@@ -228,4 +259,5 @@ export const createMerchant = async (req: Request, res: Response) => {
 
         return res.status(500).json({ message: error?.message || 'Failed to create merchant' });
     }
+
 };

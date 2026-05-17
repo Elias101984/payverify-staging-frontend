@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.VisualStudio.JavaScript.Sdk/1.0.2191419">
   <ItemGroup>
+    <None Remove="src\test\emailService.test.ts" />
+  </ItemGroup>
+  <ItemGroup>
     <Folder Include="frontend\src\hooks\" />
+    <Folder Include="Infra\pipelines\" />
+    <Folder Include="Infra\scripts\" />
   </ItemGroup>
 </Project>

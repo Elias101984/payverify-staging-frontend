@@ -1,0 +1,75 @@
+/* =====================================================================================
+   PayVerify Dark Modal Theme
+   Matches Dashboard Theme Exactly
+   ===================================================================================== */
+
+.payverify-modal .modal-content {
+    background: linear-gradient(180deg, #0f172a 0%, #020617 100%);
+    color: #e5e7eb;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 10px 40px rgba(0,0,0,0.6);
+    border-radius: 12px;
+}
+
+/* Header */
+.payverify-modal .modal-header {
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    background: transparent;
+}
+
+.payverify-modal .modal-title {
+    color: #f9fafb;
+    font-weight: 600;
+}
+
+/* Body */
+.payverify-modal .modal-body {
+    background: transparent;
+}
+
+/* Footer */
+.payverify-modal .modal-footer {
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Inputs */
+.payverify-modal .form-control {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #e5e7eb;
+}
+
+    .payverify-modal .form-control:focus {
+        background: rgba(255,255,255,0.06);
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 1px #3b82f6;
+    }
+
+/* Labels */
+.payverify-modal .form-label {
+    color: #9ca3af;
+}
+
+/* Table */
+.payverify-modal table {
+    color: #e5e7eb;
+}
+
+    .payverify-modal table thead {
+        background: rgba(255,255,255,0.04);
+    }
+
+/* Buttons */
+.payverify-modal .btn-primary {
+    background: #2563eb;
+    border: none;
+}
+
+    .payverify-modal .btn-primary:hover {
+        background: #1d4ed8;
+    }
+
+/* Close button */
+.payverify-modal .btn-close {
+    filter: invert(1);
+}

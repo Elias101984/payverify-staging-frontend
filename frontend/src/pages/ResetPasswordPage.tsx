@@ -32,8 +32,8 @@ export default function ResetPasswordPage() {
 
         try {
             setSubmitting(true);
-            await resetPasswordApi({ token: token.trim(), password });
-            toast.success('Password reset successful. Please log in.');
+            await resetPasswordApi(token.trim(), password); // ✅ FIXED
+                        toast.success('Password reset successful. Please log in.');
             navigate('/login', { replace: true });
         } catch (err: any) {
             console.error(err);

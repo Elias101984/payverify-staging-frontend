@@ -1,9 +1,51 @@
+//{
+//  //"compilerOptions": {
+//  //  "composite": true,
+//  //  "module": "ESNext",
+//  //  "moduleResolution": "NodeNext",
+//  //  "types": [ "node" ]
+//  //},
+//  //"include": [ "vite.config.ts" ]
+
+//  //"compilerOptions": {
+//  //  "composite": true,
+//  //  "module": "NodeNext", // <- was ESNext
+//  //  "moduleResolution": "NodeNext",
+//  //  "types": [ "node" ],
+//  //  "skipLibCheck": true
+//  //},
+//  //"include": [ "vite.config.ts", "tsconfig.node.json" ]
+
+
+//  {
+//    "compilerOptions": {
+//      "composite": true,
+//      "module": "ESNext",
+//      "moduleResolution": "NodeNext",
+//      "types": [ "node" ],
+//      "skipLibCheck": true
+//    },
+//    "include": [ "vite.config.ts" ]
+//  }
+
+//}
+//{
+//  "compilerOptions": {
+//    "composite": true,
+//    "module": "ESNext",
+//    "moduleResolution": "NodeNext",
+//    "types": [ "node" ],
+//    "skipLibCheck": true
+//  },
+//  "include": [ "vite.config.ts" ]
+//}
 {
   "compilerOptions": {
     "composite": true,
-    "module": "ESNext",
+    "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "types": [ "node" ]
+    "types": [ "node" ],
+    "skipLibCheck": true
   },
   "include": [ "vite.config.ts" ]
 }

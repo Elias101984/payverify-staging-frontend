@@ -1,12 +1,14 @@
 {
   "compilerOptions": {
-    /* Language & module */
-    "target": "esnext",
-    "lib": [ "dom", "dom.iterable", "esnext" ],
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    /* Language & module setup */
+    "target": "ESNext",
+    "lib": [ "DOM", "DOM.Iterable", "ESNext" ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+
+    /* JSX & Types */
     "jsx": "react-jsx",
     "types": [ "vite/client", "node" ],
 
@@ -21,7 +23,7 @@
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* Build behaviour (Vite handles emit) */
+    /* Build behavior (Vite handles emit) */
     "noEmit": true,
 
     /* Absolute imports like '@/components/Button' */
@@ -30,16 +32,12 @@
       "@/*": [ "*" ]
     },
 
-    /* Ensure local d.ts files are picked up */
+    /* Ensure local type roots are visible */
     "typeRoots": [ "./node_modules/@types", "./src/types" ]
   },
 
-  /* Only include frontend code */
-  "include": [ "src/**/*", "src/vite-env.d.ts" ],
-
-  /* Never compile backend files from the client build */
-  "exclude": [ "../src/**", "../server/**", "../api/**", "../backend/**", "node_modules" ],
-
-  /* NEW: tell TS there's a separate Node config for vite.config.ts */
+  /* ✅ Top-level keys (moved outside compilerOptions) */
+  "include": [ "src/**/*", "vite-env.d.ts" ],
+  "exclude": [ "../backend/**", "../server/**", "../api/**", "node_modules" ],
   "references": [ { "path": "./tsconfig.node.json" } ]
 }

@@ -8,27 +8,41 @@
  *   This removes the field-name mismatch that caused 400s.
  */
 
+// src/services/api.ts
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api';
+/**
+ * Base API URL
+ * - Must be set at build time in Azure for Vite
+ * - Example: https://payverify-api.azurecontainerapps.io
+ */
+//const API_BASE_URL =
+//    import.meta.env.VITE_API_BASE_URL ||
+//    '/api'; // safe fallback for local dev with proxy
+
+//swap the apibaseurl for local development REMEMBER TO SWITCH IT BACK FOR PROD
+
+//const API_BASE_URL = import.meta.env.VITE_API_BASE;
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
 
 export const api = axios.create({
     baseURL: API_BASE_URL,
     headers: { 'Content-Type': 'application/json' },
-    timeout: 20_000,
+    timeout: Number(import.meta.env.VITE_HTTP_TIMEOUT_MS) || 15000,
 });
 
+// Attach auth token if present
 api.interceptors.request.use((config) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (token) {
-            config.headers = config.headers ?? {};
-            (config.headers as any).Authorization = `Bearer ${token}`;
-        }
-    } catch { /* no-op */ }
+    const token = localStorage.getItem('token');
+    if (token) {
+        config.headers = config.headers ?? {};
+        (config.headers as any).Authorization = `Bearer ${token}`;
+    }
     return config;
 });
 
+// Handle auth expiration
 api.interceptors.response.use(
     (res) => res,
     (err) => {

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "test"
+    },
+    "appServiceName": {
+      "value": "payverify-test-api"
+    },
+    "postgresServerName": {
+      "value": "payverify-test-postgres"
+    },
+    "keyVaultName": {
+      "value": "payverify-test-kv"
+    },
+    "storageAccountName": {
+      "value": "payverifyteststorage"
+    },
+    "postgresAdminLogin": {
+      "value": "payverifyadmin"
+    },
+    "postgresAdminPassword": {
+      "value": "ChangeThisPassword123!"
+    }
+  }
+}

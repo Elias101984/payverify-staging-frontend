@@ -4,7 +4,14 @@ import { ToastContainer } from 'react-toastify';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'react-toastify/dist/ReactToastify.css';
 
-import LandingPage from './pages/LandingPage';        // ✅ NEW: import your landing page
+import LandingPage from './pages/LandingPage';
+
+// =============================================================================
+// IMPORT PAYMENT PAGE (NEW)
+// REQUIRED FOR PUBLIC INVOICE ACCESS
+// =============================================================================
+import PaymentPage from './pages/PaymentPage';
+
 
 // existing imports…
 import LoginPage from './pages/LoginPage';
@@ -27,9 +34,7 @@ import BankDashboard from './pages/BankDashboard';
 import BankProtectedRoute from './components/BankProtectedRoute';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-//import MerchantsPage from './pages/MerchantsPage';
-
-
+import InvoicePayPage from './pages/InvoicePayPage';
 
 
 const App = () => {
@@ -38,11 +43,39 @@ const App = () => {
             <ToastContainer position="top-center" autoClose={3000} />
 
             <Routes>
-                {/* 🔁 OLD (remove this): <Route path="/" element={<Navigate to="/login" replace />} /> */}
-                {/* ✅ NEW: Landing page is now the first page users see */}
+
+                {/* =============================================================================
+                   LANDING PAGE
+                ============================================================================= */}
                 <Route path="/" element={<LandingPage />} />
 
-                {/* Public routes */}
+
+
+                {/* =============================================================================
+                   NEW PUBLIC PAYMENT ROUTE (FIX)
+                   
+                   THIS IS THE CRITICAL FIX
+                   
+                   Allows:
+                   http://localhost:5173/pay/{token}
+                   
+                   WITHOUT authentication
+                   
+                   Prevents redirect to home page
+                ============================================================================= */}
+                {/*<Route path="/pay/:token" element={<PaymentPage />} />*/}
+
+                <Route
+                    path="/pay/:invoiceId"
+                    element={<InvoicePayPage />}
+                />
+
+                // NEW — Invoice Paystack public page
+                <Route path="/invoice-pay/:invoiceId" element={<InvoicePayPage />} />
+
+                {/* =============================================================================
+                   PUBLIC ROUTES
+                ============================================================================= */}
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/register-user" element={<UserRegistration />} />
@@ -55,8 +88,13 @@ const App = () => {
                 <Route path="/transactions/:reference" element={<TransactionDetailsPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/merchant-created/:merchantId" element={<MerchantCreatedPage />} />
 
-                {/* Protected (unchanged) */}
+
+
+                {/* =============================================================================
+                   PROTECTED ROUTES
+                ============================================================================= */}
                 <Route
                     path="/dashboard"
                     element={
@@ -65,6 +103,7 @@ const App = () => {
                         </ProtectedRoute>
                     }
                 />
+
                 <Route
                     path="/transactions"
                     element={
@@ -73,6 +112,7 @@ const App = () => {
                         </ProtectedRoute>
                     }
                 />
+
                 <Route
                     path="/qr-generator"
                     element={
@@ -81,6 +121,7 @@ const App = () => {
                         </ProtectedRoute>
                     }
                 />
+
                 <Route
                     path="/profile"
                     element={
@@ -90,7 +131,11 @@ const App = () => {
                     }
                 />
 
-                {/* Bank protected */}
+
+
+                {/* =============================================================================
+                   BANK PROTECTED ROUTES
+                ============================================================================= */}
                 <Route
                     path="/bank-dashboard"
                     element={
@@ -100,14 +145,19 @@ const App = () => {
                     }
                 />
 
-                {/* Optional: unknown routes go home */}
-                <Route path="*" element={<Navigate to="/" replace />} />
 
-                <Route path="/merchant-created/:merchantId" element={<MerchantCreatedPage />} />
+
+                {/* =============================================================================
+                   FALLBACK ROUTE
+                   
+                   If route not found → redirect to landing page
+                   
+                   NOW SAFE because /pay/:token exists above
+                ============================================================================= */}
+                <Route path="*" element={<Navigate to="/" replace />} />
 
             </Routes>
 
-            
         </>
     );
 };

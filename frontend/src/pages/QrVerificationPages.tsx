@@ -1,9 +1,26 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿// src/pages/QrVerificationPages.tsx
+// -----------------------------------------------------------------------------
+// QR Code Verification Page
+//
+//  CHANGES MADE (PRODUCTION FIX):
+// -  Removed direct axios import and usage
+// -  Removed direct access to import.meta.env in this page
+// - ✅ Uses shared Axios client from services/api
+//
+// WHY:
+// - Ensures VITE_API_BASE from .env.production is used
+// - Prevents hardcoded or bypassed API URLs
+// - Centralizes headers, auth, timeouts, and error handling
+// -----------------------------------------------------------------------------
+
+import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
-import axios from 'axios';
 import Navbar from '../components/Navbar';
 import Button from '../components/Button';
+
+// ✅ Shared API client (single source of truth)
+import api from '../services/api';
 
 interface QRPayload {
     merchantId: number;
@@ -11,12 +28,13 @@ interface QRPayload {
     accountNumber: string;
     bankName: string;
     token: string;
-    amount: number;
-    description: string;
+    amount?: number;
+    description?: string;
 }
 
 const QRVerificationPage: React.FC = () => {
     const { token } = useParams<{ token: string }>();
+
     const [qrData, setQrData] = useState<QRPayload | null>(null);
     const [valid, setValid] = useState<boolean | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -28,13 +46,15 @@ const QRVerificationPage: React.FC = () => {
         }
 
         try {
+            // Decode token locally first for instant UX feedback
             const decoded = jwtDecode<QRPayload>(token);
             setQrData(decoded);
 
-            axios
-                .post('http://localhost:3001/api/qr/validate', { token })
+            // ✅ FIX: use shared API client instead of direct axios / env usage
+            api
+                .post('/qr/validate', { token })
                 .then((res) => {
-                    if (res.data.valid) {
+                    if (res.data?.valid) {
                         setValid(true);
                     } else {
                         setValid(false);
@@ -45,7 +65,7 @@ const QRVerificationPage: React.FC = () => {
                     setValid(false);
                     setError('Failed to validate token with server');
                 });
-        } catch (err) {
+        } catch {
             setError('Invalid QR token format');
             setValid(false);
         }
@@ -54,6 +74,7 @@ const QRVerificationPage: React.FC = () => {
     return (
         <>
             <Navbar />
+
             <div className="container mt-4">
                 <nav aria-label="breadcrumb">
                     <ol className="breadcrumb">
@@ -68,7 +89,7 @@ const QRVerificationPage: React.FC = () => {
 
                 <h2 className="mb-4">QR Code Verification</h2>
 
-                {valid === null && <p>Validating token...</p>}
+                {valid === null && <p>Validating token…</p>}
                 {error && <div className="alert alert-danger">{error}</div>}
 
                 {valid && qrData && (
@@ -78,14 +99,23 @@ const QRVerificationPage: React.FC = () => {
                         <p><strong>Business Name:</strong> {qrData.businessName}</p>
                         <p><strong>Bank:</strong> {qrData.bankName}</p>
                         <p><strong>Account Number:</strong> {qrData.accountNumber}</p>
+
                         {qrData.amount && (
-                            <p><strong>Amount:</strong> ₦{qrData.amount.toLocaleString()}</p>
-                        )}
-                        {qrData.description && (
-                            <p><strong>Description:</strong> {qrData.description}</p>
+                            <p>
+                                <strong>Amount:</strong> ₦{qrData.amount.toLocaleString()}
+                            </p>
                         )}
 
-                        <Button className="btn-outline-secondary mt-3" onClick={() => window.history.back()}>
+                        {qrData.description && (
+                            <p>
+                                <strong>Description:</strong> {qrData.description}
+                            </p>
+                        )}
+
+                        <Button
+                            className="btn-outline-secondary mt-3"
+                            onClick={() => window.history.back()}
+                        >
                             Back
                         </Button>
                     </div>

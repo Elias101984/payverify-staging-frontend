@@ -1,59 +1,173 @@
-﻿import { Model, DataTypes, Optional } from 'sequelize';
-import { sequelize } from '../config/db';
-import { Merchant } from './Merchant';
+﻿//import { Model, DataTypes, Optional } from 'sequelize';
+//import { sequelize } from '../config/db';
+//import { Merchant } from './Merchant';
 
-/**
- * Full set of attributes in the `transactions` table.
- * Added:
- *  - reference: unique string per transaction (for QR & tracking)
- *  - qrUrl: optional Cloudinary URL to QR image
- */
-interface TransactionAttributes {
+///**
+// * Full set of attributes in the `transactions` table.
+// * Added:
+// *  - reference: unique string per transaction (for QR & tracking)
+// *  - qrUrl: optional Cloudinary URL to QR image
+// */
+//interface TransactionAttributes {
+//    id: number;
+//    amount: number;
+//    status: string;
+//    merchantId: number;
+//    reference: string;
+//    qrUrl?: string;
+//    createdAt?: Date;
+//    updatedAt?: Date;
+//}
+
+///**
+// * Attributes allowed when creating a transaction
+// */
+//interface TransactionCreationAttributes extends Optional<TransactionAttributes, 'id' | 'qrUrl'> { }
+
+///**
+// * Sequelize Model representing the 'transactions' table.
+// */
+//class Transaction extends Model<TransactionAttributes, TransactionCreationAttributes>
+//    implements TransactionAttributes {
+//    public id!: number;
+//    public amount!: number;
+//    public status!: string;
+//    public merchantId!: number;
+//    public reference!: string;
+//    public qrUrl?: string;
+//    public readonly createdAt!: Date;
+//    public readonly updatedAt!: Date;
+
+//    public merchant?: Merchant;
+
+//    // Custom static method: create a transaction
+//    static async createForMerchant(
+//        merchantId: number,
+//        amount: number,
+//        status: string,
+//        reference: string,
+//        qrUrl?: string
+//    ) {
+//        return await this.create({ merchantId, amount, status, reference, qrUrl });
+//    }
+
+//    // Custom static method: find transactions for a merchant
+//    static async findByMerchant(merchantId: number, limit = 10, offset = 0) {
+//        return await this.findAndCountAll({
+//            where: { merchantId },
+//            order: [['createdAt', 'DESC']],
+//            limit,
+//            offset,
+//        });
+//    }
+//}
+
+//// ✅ Initialize model
+//Transaction.init(
+//    {
+//        id: {
+//            type: DataTypes.INTEGER,
+//            autoIncrement: true,
+//            primaryKey: true,
+//        },
+//        amount: {
+//            type: DataTypes.FLOAT,
+//            allowNull: false,
+//        },
+//        status: {
+//            type: DataTypes.ENUM('pending', 'completed', 'failed'),
+//            allowNull: false,
+//            defaultValue: 'pending',
+//        },
+//        merchantId: {
+//            type: DataTypes.INTEGER,
+//            allowNull: false,
+//        },
+//        reference: {
+//            type: DataTypes.STRING,
+//            allowNull: false,
+//            unique: true,
+//        },
+//        qrUrl: {
+//            type: DataTypes.STRING,
+//            allowNull: true,
+//        },
+//    },
+//    {
+//        sequelize,
+//        modelName: 'Transaction',
+//        tableName: 'transactions',
+//        timestamps: true,
+//    }
+//);
+
+
+
+//export default Transaction;
+
+
+
+
+
+
+// src/models/Transaction.ts
+// -----------------------------------------------------------------------------
+// Why changes:
+// - File name now matches the model (prevents import confusion).
+// - Keeps your helpers (createForMerchant, findByMerchant).
+// - Explicit enum types for status.
+// -----------------------------------------------------------------------------
+
+import { Model, DataTypes, Optional } from 'sequelize';
+import { sequelize } from '../config/db';
+import type Merchant from './Merchant';
+
+export type TxStatus = 'pending' | 'completed' | 'failed';
+
+export interface TransactionAttributes {
     id: number;
     amount: number;
-    status: string;
+    status: TxStatus;
     merchantId: number;
     reference: string;
-    qrUrl?: string;
+    qrUrl?: string | null;
     createdAt?: Date;
     updatedAt?: Date;
 }
 
-/**
- * Attributes allowed when creating a transaction
- */
-interface TransactionCreationAttributes extends Optional<TransactionAttributes, 'id' | 'qrUrl'> { }
+export type TransactionCreationAttributes = Optional<
+    TransactionAttributes,
+    'id' | 'qrUrl' | 'createdAt' | 'updatedAt'
+>;
 
-/**
- * Sequelize Model representing the 'transactions' table.
- */
-class Transaction extends Model<TransactionAttributes, TransactionCreationAttributes>
+export default class Transaction
+    extends Model<TransactionAttributes, TransactionCreationAttributes>
     implements TransactionAttributes {
     public id!: number;
     public amount!: number;
-    public status!: string;
+    public status!: TxStatus;
     public merchantId!: number;
     public reference!: string;
-    public qrUrl?: string;
+    public qrUrl?: string | null;
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
 
     public merchant?: Merchant;
 
-    // Custom static method: create a transaction
+    // Helper: create a transaction for a merchant
     static async createForMerchant(
         merchantId: number,
         amount: number,
-        status: string,
+        status: TxStatus,
         reference: string,
-        qrUrl?: string
+        qrUrl?: string | null
     ) {
-        return await this.create({ merchantId, amount, status, reference, qrUrl });
+        return this.create({ merchantId, amount, status, reference, qrUrl });
     }
 
-    // Custom static method: find transactions for a merchant
+    // Helper: list transactions by merchant
     static async findByMerchant(merchantId: number, limit = 10, offset = 0) {
-        return await this.findAndCountAll({
+        return this.findAndCountAll({
             where: { merchantId },
             order: [['createdAt', 'DESC']],
             limit,
@@ -62,45 +176,35 @@ class Transaction extends Model<TransactionAttributes, TransactionCreationAttrib
     }
 }
 
-// ✅ Initialize model
 Transaction.init(
     {
-        id: {
-            type: DataTypes.INTEGER,
-            autoIncrement: true,
-            primaryKey: true,
-        },
-        amount: {
-            type: DataTypes.FLOAT,
-            allowNull: false,
-        },
+        id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+        amount: { type: DataTypes.FLOAT, allowNull: false },
         status: {
             type: DataTypes.ENUM('pending', 'completed', 'failed'),
             allowNull: false,
             defaultValue: 'pending',
         },
-        merchantId: {
-            type: DataTypes.INTEGER,
-            allowNull: false,
-        },
-        reference: {
-            type: DataTypes.STRING,
-            allowNull: false,
-            unique: true,
-        },
-        qrUrl: {
-            type: DataTypes.STRING,
-            allowNull: true,
-        },
+        merchantId: { type: DataTypes.INTEGER, allowNull: false },
+        reference: { type: DataTypes.STRING, allowNull: false, unique: true },
+        qrUrl: { type: DataTypes.STRING, allowNull: true },
     },
     {
         sequelize,
-        modelName: 'Transaction',
         tableName: 'transactions',
+        modelName: 'Transaction',
         timestamps: true,
     }
 );
 
 
 
-export default Transaction;
+
+
+
+
+
+
+
+
+

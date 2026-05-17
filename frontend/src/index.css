@@ -1,39 +1,112 @@
+﻿/* =============================================================================
+   BASE (UNCHANGED)
+   ============================================================================= */
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* 🔥 NEW: dark dashboard background */
+    background: linear-gradient(135deg, #0f172a, #020617);
+    color: #fff;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
+/* =============================================================================
+   MODAL OVERLAY (GLASS DIM EFFECT)
+   ============================================================================= */
 .modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    background-color: rgba(0, 0, 0, 0.5);
+    /* 🔥 UPDATED */
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
     z-index: 1050;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
+/* =============================================================================
+   MODAL CONTAINER (GLASS CARD)
+   ============================================================================= */
 .modal-container {
-    background-color: white;
+    /* 🔥 GLASS EFFECT */
+    background: rgba(17, 25, 40, 0.75);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-radius: 16px;
+    /* 🔥 BORDER GLOW */
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    /* 🔥 SHADOW DEPTH */
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
     padding: 2rem;
-    border-radius: 10px;
-    max-width: 400px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    max-width: 420px;
+    width: 100%;
+    /* 🔥 TEXT COLOR */
+    color: #fff;
+    /* 🔥 SMOOTH ANIMATION */
+    transition: all 0.3s ease;
 }
 
+    /* OPTIONAL HOVER LIFT */
+    .modal-container:hover {
+        transform: translateY(-2px);
+    }
+
+/* =============================================================================
+   MODAL ACTIONS (BUTTON AREA)
+   ============================================================================= */
 .modal-actions {
     display: flex;
     justify-content: flex-end;
+    gap: 10px;
 }
+
+    /* =============================================================================
+   BUTTON STYLING (MATCH DASHBOARD)
+   ============================================================================= */
+    .modal-actions button {
+        border-radius: 20px;
+        padding: 6px 16px;
+        font-weight: 500;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    /* APPROVE / PRIMARY BUTTON */
+    .modal-actions .btn-primary {
+        background: linear-gradient(135deg, #2563eb, #3b82f6);
+        color: white;
+    }
+
+        .modal-actions .btn-primary:hover {
+            transform: scale(1.05);
+        }
+
+    /* DANGER BUTTON */
+    .modal-actions .btn-danger {
+        background: linear-gradient(135deg, #dc2626, #ef4444);
+        color: white;
+    }
+
+        .modal-actions .btn-danger:hover {
+            transform: scale(1.05);
+        }
+
+    /* SECONDARY BUTTON */
+    .modal-actions .btn-secondary {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+    }
+
+        .modal-actions .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
