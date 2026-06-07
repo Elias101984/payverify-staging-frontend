@@ -1,0 +1,32 @@
+variables:
+- group: PayVerify-Frontend
+
+trigger:
+  branches:
+    include:
+      - mvp
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+
+- checkout: self
+
+- task: NodeTool@0
+  inputs:
+    versionSpec: '20.x'
+
+- script: |
+    cd frontend
+    npm ci
+    npm run build
+  displayName: 'Build React App'
+
+- task: AzureStaticWebApp@0
+  displayName: 'Deploy React Frontend'
+  inputs:
+    app_location: "frontend"
+    output_location: "dist"
+    skip_app_build: true
+    azure_static_web_apps_api_token: "$(AZURE_STATIC_WEB_APPS_API_TOKEN)"
