@@ -1,126 +1,70 @@
 trigger:
-branches:
-include:
-- main
-- develop
+  branches:
+    include:
+      - mvp
 
 pool:
-vmImage: ubuntu-latest
+  vmImage: ubuntu-latest
 
 variables:
-azureSubscription: 'payverify-dev-sc-v2'
-resourceGroupName: 'payverify-centralus-dev-rg'
-webAppName: 'payverify-dev-api'
+  azureSubscription: 'payverify-dev-sc-v2'
+  resourceGroupName: 'payverify-centralus-dev-rg'
+  webAppName: 'payverify-dev-api'
 
 stages:
 
-# ============================================================
-
-# BUILD STAGE
-
-# ============================================================
-
-* stage: Build
-  displayName: Build Application
+- stage: Build
+  displayName: Build API
 
   jobs:
-
-  * job: BuildJob
+  - job: BuildJob
 
     steps:
+    - checkout: self
 
-    * checkout: self
-
-    * task: NodeTool@0
+    - task: NodeTool@0
+      displayName: Use Node 20
       inputs:
-      versionSpec: '20.x'
+        versionSpec: '20.x'
 
-    * script: |
-      npm install
-      npm run build
-      displayName: 'Install & Build'
+    - script: |
+        npm install
+        npm run build
+      displayName: Install and Build
 
-    * task: ArchiveFiles@2
-      displayName: 'Create Deployment Package'
+    - task: ArchiveFiles@2
+      displayName: Create Deployment Package
       inputs:
-      rootFolderOrFile: '$(Build.SourcesDirectory)'
-      includeRootFolder: false
-      archiveType: zip
-      archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
-      replaceExistingArchive: true
+        rootFolderOrFile: '$(Build.SourcesDirectory)'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
+        replaceExistingArchive: true
 
-    * publish: $(Build.ArtifactStagingDirectory)/app.zip
+    - publish: '$(Build.ArtifactStagingDirectory)/app.zip'
       artifact: drop
 
-# ============================================================
-
-# DEV INFRASTRUCTURE DEPLOYMENT
-
-# ============================================================
-
-* stage: Deploy_Dev_Infrastructure
-  displayName: Deploy Infrastructure
+- stage: Deploy_Dev_Application
+  displayName: Deploy API
   dependsOn: Build
 
   jobs:
-
-  * deployment: DeployInfrastructure
-
-    environment: DEV
-
-    strategy:
-    runOnce:
-    deploy:
-    steps:
-
-    ```
-        - download: current
-          artifact: drop
-
-        - task: AzureCLI@2
-          displayName: 'Deploy Bicep Infrastructure'
-          inputs:
-            azureSubscription: 'payverify-dev-sc-v2'
-            scriptType: bash
-            scriptLocation: inlineScript
-
-            inlineScript: |
-              az deployment group create \
-                --resource-group payverify-centralus-dev-rg \
-                --template-file infra/bicep/main.bicep \
-                --parameters @infra/parameters/dev.parameters.json
-    ```
-
-# ============================================================
-
-# DEV APPLICATION DEPLOYMENT
-
-# ============================================================
-
-* stage: Deploy_Dev_Application
-  displayName: Deploy Application
-  dependsOn: Deploy_Dev_Infrastructure
-
-  jobs:
-
-  * deployment: DeployApp
+  - deployment: DeployApp
 
     environment: DEV
 
     strategy:
-    runOnce:
-    deploy:
-    steps:
+      runOnce:
+        deploy:
+          steps:
 
-    ```
-        - download: current
-          artifact: drop
+          - download: current
+            artifact: drop
 
-        - task: AzureWebApp@1
-          displayName: 'Deploy PayVerify API'
+          - task: AzureWebApp@1
+            displayName: Deploy PayVerify API
 
-          inputs:
-            azureSubscription: 'payverify-dev-sc-v2'
-            appName: 'payverify-dev-api'
-            package: '$(Pipeline.Workspace)/drop/app.zip'
-    ```
+            inputs:
+              azureSubscription: 'payverify-dev-sc-v2'
+              appName: 'payverify-dev-api'
+              package: '$(Pipeline.Workspace)/drop/app.zip'
