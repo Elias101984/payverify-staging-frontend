@@ -15,7 +15,21 @@
 
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resend: Resend | null = null;
+
+function getResendClient(): Resend | null {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+
+    if (!apiKey) {
+        return null;
+    }
+
+    if (!resend) {
+        resend = new Resend(apiKey);
+    }
+
+    return resend;
+}
 
 // =============================================================================
 // Helper — format naira safely
@@ -39,7 +53,9 @@ async function safeSendEmail(payload: {
     subject: string;
     html: string;
 }) {
-    if (!process.env.RESEND_API_KEY) {
+    const client = getResendClient();
+
+    if (!client) {
         console.warn("[emailService] RESEND_API_KEY missing — email skipped");
         return;
     }
@@ -49,7 +65,7 @@ async function safeSendEmail(payload: {
         return;
     }
 
-    await resend.emails.send({
+    await client.emails.send({
         from: process.env.EMAIL_FROM,
         to: payload.to,
         subject: payload.subject,

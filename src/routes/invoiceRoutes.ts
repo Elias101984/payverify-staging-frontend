@@ -34,21 +34,11 @@
 
 import { Router } from "express";
 import { InvoiceController }  from "../controllers/InvoiceController";
-import { initializeInvoicePayment } from "../controllers/InvoicePaymentController";
+import { continuePayment } from "../controllers/InvoicePaymentController";
+
 
 const router = Router();
 const controller = new InvoiceController();
-
-/**
- * ============================================================
- * PUBLIC invoice fetch
- * GET /api/invoices/public/:invoiceId
- * ============================================================
- */
-router.get(
-    "/public/:invoiceId",
-    controller.getPublicInvoiceById.bind(controller)
-);
 
 /**
  * ============================================================
@@ -61,15 +51,7 @@ router.get(
     controller.downloadInvoicePDFByToken.bind(controller)
 );
 
-/**
- * ============================================================
- * Initialize Paystack payment
- * POST /api/invoices/:invoiceId/paystack/initialize
- * ============================================================
- */
-router.post(
-    "/:invoiceId/paystack/initialize",
-    initializeInvoicePayment
-);
+// Server re-verifies the merchant before Paystack is initialized.
+router.post("/:invoiceId/payments/continue", continuePayment);
 
 export default router;

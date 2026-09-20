@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "prod"
+    },
+
+    "appServiceName": {
+      "value": "payverify-prod-api"
+    },
+
+    "postgresServerName": {
+      "value": "payverify-prod-postgres"
+    },
+
+    "keyVaultName": {
+      "value": "payverify-prod-kv-001"
+    },
+
+    "postgresAdminPassword": {
+      "value": "YourStrongPassword123!"
+    }
+  }
+}

@@ -264,8 +264,8 @@
 // Sending invoice email should NOT require auth.
 // This was causing:
 //
-// • 500 Internal Server Error
-// • Unauthorized toast
+//  500 Internal Server Error
+//  Unauthorized toast
 //
 // =============================================================================
 
@@ -317,22 +317,21 @@ router.post(
 );
 
 
-// =============================================================================
-// MARK PAYMENT AS PAID
-// =============================================================================
+//// =============================================================================
+//// MARK PAYMENT AS PAID
+//// =============================================================================
 
-router.post(
+//router.post(
 
-    "/:id/mark-paid",
+//    "/:id/mark-paid",
 
-    controller.markPaid
+//    controller.markPaid
 
-);
+//);
 
-router.post(
-    "/public/:token/paystack/init",
-    controller.initPaystackPublic.bind(controller)
-);
+// Paystack initialization is intentionally not exposed from PaymentIntent.
+// The verified invoice endpoint is the single public payment path:
+// POST /api/invoices/:invoiceId/payments/continue
 
 //router.get(
 //    "/paystack/verify/:reference",

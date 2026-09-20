@@ -214,6 +214,13 @@ export class Merchant extends Model<
     declare account_number: string;
     declare bank_name: string;
 
+    // Paystack settlement configuration. Populated after a Live subaccount is
+    // created for this merchant in Paystack.
+    declare paystack_subaccount_code: CreationOptional<string | null>;
+    declare paystack_subaccount_id: CreationOptional<number | null>;
+    declare platform_fee_kobo: CreationOptional<number>;
+    declare paystack_fee_bearer: CreationOptional<'account' | 'subaccount'>;
+
     // QR metadata
     declare qrToken: string | null;       // JWT or payload used to render/verify QR
     declare qrUrl: string | null;         // Cloudinary (or other) URL for the QR image
@@ -267,6 +274,27 @@ Merchant.init(
         // Banking / settlement
         account_number: { type: DataTypes.STRING, allowNull: false },
         bank_name: { type: DataTypes.STRING, allowNull: false },
+
+        paystack_subaccount_code: {
+            type: DataTypes.STRING(120),
+            allowNull: true,
+        },
+        paystack_subaccount_id: {
+            type: DataTypes.BIGINT,
+            allowNull: true,
+        },
+        platform_fee_kobo: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 0,
+            validate: { min: 0 },
+        },
+        paystack_fee_bearer: {
+            type: DataTypes.STRING(20),
+            allowNull: false,
+            defaultValue: 'subaccount',
+            validate: { isIn: [['account', 'subaccount']] },
+        },
 
         // QR-related fields
         qrToken: { type: DataTypes.TEXT, allowNull: true },

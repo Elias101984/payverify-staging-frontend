@@ -11,11 +11,11 @@
 import { Router } from 'express';
 import { verifyJwtMiddleware } from '../middlewares/authMiddleware';
 import {
-  getTransactionsSummary,
-  getDashboardTiles,
-  getFraudBreakdown,
-  getFraudBreakdownTransactions,
-  getAiInsights,
+    getTransactionsSummary,
+    getDashboardTiles,
+    getFraudBreakdown,
+    getFraudBreakdownTransactions,
+    getAiInsights,
 } from '../controllers/analyticsController';
 
 const router = Router();
@@ -46,7 +46,7 @@ const router = Router();
  *         meta:
  *           type: object
  *           properties:
- *             interval: { type: string, enum: [day, week, month], example: day }
+ *             interval: { type: string, enum: [day, week, month, year], example: day }
  *             dateFrom: { type: string, example: "2025-07-08T00:00:00.000Z" }
  *             dateTo: { type: string, example: "2025-08-07T23:59:59.999Z" }
  *             role: { type: string, example: "admin" }
@@ -83,7 +83,7 @@ const router = Router();
  *     parameters:
  *       - in: query
  *         name: interval
- *         schema: { type: string, enum: [day, week, month], default: day }
+ *         schema: { type: string, enum: [day, week, month, year], default: day }
  *       - in: query
  *         name: dateFrom
  *         schema: { type: string, example: "2025-07-01" }
@@ -174,9 +174,9 @@ router.get('/fraud-breakdown', verifyJwtMiddleware, getFraudBreakdown);
  *       200: { description: Array of transactions/refunds/disputes }
  */
 router.get(
-  '/fraud-breakdown/transactions',
-  verifyJwtMiddleware,
-  getFraudBreakdownTransactions
+    '/fraud-breakdown/transactions',
+    verifyJwtMiddleware,
+    getFraudBreakdownTransactions
 );
 
 /**

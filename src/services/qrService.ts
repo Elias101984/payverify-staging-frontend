@@ -134,20 +134,51 @@ export const validateQRCode = async (req: Request, res: Response): Promise<void>
  * GET /qr/download/:merchantId
  * ------------------------------------------------------------------------------
  * Redirects the client to the QR image hosted on Cloudinary.
+ *
+ * TYPESCRIPT / RENDER BUILD FIX:
+ * - Express may type req.params.merchantId as string | string[].
+ * - parseInt() requires a single string.
+ * - Normalize the route parameter before parsing.
+ *
+ * This resolves the Render production TypeScript compilation error.
  */
-export const downloadQRCode = async (req: Request, res: Response): Promise<void> => {
+export const downloadQRCode = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
     try {
-        const merchantId = parseInt(req.params.merchantId, 10);
+        // Normalize merchantId from string | string[] to a single string.
+        const merchantIdParam = Array.isArray(req.params.merchantId)
+            ? req.params.merchantId[0]
+            : req.params.merchantId;
+
+        // Convert the route parameter to a numeric merchant ID.
+        const merchantId = parseInt(merchantIdParam, 10);
+
+        // Validate the ID before querying Sequelize.
+        if (Number.isNaN(merchantId)) {
+            res.status(400).json({
+                message: 'Invalid merchant ID',
+            });
+            return;
+        }
+
         const merchant = await Merchant.findByPk(merchantId);
 
         if (!merchant || !merchant.qrUrl) {
-            res.status(404).json({ message: 'QR not found' });
+            res.status(404).json({
+                message: 'QR not found',
+            });
             return;
         }
 
         res.redirect(merchant.qrUrl);
+
     } catch (err) {
         console.error('QR download failed', err);
-        res.status(500).json({ message: 'QR download failed' });
+
+        res.status(500).json({
+            message: 'QR download failed',
+        });
     }
 };

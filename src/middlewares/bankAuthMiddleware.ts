@@ -2,7 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import Bank from '../models/Bank';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const getJwtSecret = (): string => {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        throw new Error('JWT_SECRET is not configured');
+    }
+    return secret;
+};
 
 // Narrow type for what we expect to decode.
 type DecodedToken = {
@@ -31,7 +37,7 @@ export const authenticateBank = async (req: Request, res: Response, next: NextFu
     const token = authHeader.slice(7);
 
     try {
-        const payload = jwt.verify(token, JWT_SECRET) as DecodedToken;
+        const payload = jwt.verify(token, getJwtSecret()) as DecodedToken;
 
         // Resolve bankId from several possible places
         let bankId = payload.bankId;

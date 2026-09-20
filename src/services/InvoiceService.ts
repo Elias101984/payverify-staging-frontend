@@ -2587,6 +2587,7 @@ import { PaymentIntent } from "../models/PaymentIntent";
 import PurchaseOrder from "../models/PurchaseOrder";
 import { PurchaseOrderItem } from "../models/PurchaseOrderItem";
 import { Invoice } from "../models/Invoice";
+import Merchant from "../models/Merchant";
 
 // =============================================================================
 // Helpers
@@ -2594,8 +2595,30 @@ import { Invoice } from "../models/Invoice";
 
 let useNairaSymbol = true;
 
+function resolvePdfFont(): string {
+    const candidates = [
+        path.resolve(process.cwd(), "src/assets/fonts/NotoSans-Regular.ttf"),
+        path.resolve(__dirname, "../assets/fonts/NotoSans-Regular.ttf"),
+    ];
+    const fontPath = candidates.find((candidate) => fs.existsSync(candidate));
+    if (!fontPath) throw new Error("Invoice font is missing: NotoSans-Regular.ttf");
+    return fontPath;
+}
+
+function resolvePdfLogo(): string {
+    const candidates = [
+        path.resolve(process.cwd(), "src/assets/payverify-logo.png"),
+        path.resolve(__dirname, "../assets/payverify-logo.png"),
+    ];
+    const logoPath = candidates.find((candidate) => fs.existsSync(candidate));
+    if (!logoPath) throw new Error("PayVerify invoice logo is missing");
+    return logoPath;
+}
+
 const FRONTEND_BASE_URL =
-    process.env.FRONTEND_BASE_URL || "http://localhost:5173";
+    process.env.FRONTEND_URL ||
+    process.env.FRONTEND_BASE_URL ||
+    "http://localhost:5173";
 
 function generatePublicToken(): string {
     // shorter, URL safe
@@ -2724,6 +2747,9 @@ export class InvoiceService {
         const po = await PurchaseOrder.findByPk(intent.purchase_order_id);
         if (!po) throw new Error("PurchaseOrder not found");
 
+        const merchant = await Merchant.findByPk(intent.merchant_id);
+        if (!merchant) throw new Error("Merchant not found");
+
         const items = await PurchaseOrderItem.findAll({
             where: { purchaseOrderId: po.id },
         });
@@ -2745,149 +2771,172 @@ export class InvoiceService {
             return { name, quantity: qty, unitPrice: price, lineTotal };
         });
 
-        const tax = subtotal * 0.075;
-        const grandTotal = subtotal + tax;
+        // Keep the invoice total identical to the amount Paystack will charge.
+        // Tax must be captured before the PaymentIntent is created, not added
+        // while rendering the PDF.
+        const grandTotal = Number(intent.amount || po.totalAmount || subtotal);
         const invoiceNumber = generateInvoiceNumber(intent.id);
+        const customerName = String(
+            po.customerName || intent.customer_name || ""
+        ).trim() || "Walk-in customer";
 
         // 🔥 CRITICAL — guaranteed token
         const invoiceRecord = await this.ensureInvoice(intent, grandTotal);
 
-        // 🔥 CORRECT PUBLIC PAYMENT LINK
-        const payUrl = `${FRONTEND_BASE_URL}/pay/${invoiceRecord.public_token}`;
 
-        // -----------------------------------------------------------------------
-        // PDF creation (your layout preserved)
-        // -----------------------------------------------------------------------
-        const doc = new PDFDocument({ margin: 50, size: "A4" });
+        console.log('========================================');
+        console.log('INVOICE FRONTEND_URL:', process.env.FRONTEND_URL);
+        console.log('INVOICE FRONTEND_BASE_URL:', process.env.FRONTEND_BASE_URL);
+        console.log('RESOLVED FRONTEND_BASE_URL:', FRONTEND_BASE_URL);
+        console.log('INVOICE PUBLIC TOKEN:', invoiceRecord.public_token);
+        console.log('========================================');
+
+        // 🔥 CORRECT PUBLIC PAYMENT LINK
+        const payUrl =
+            `${FRONTEND_BASE_URL.replace(/\/+$/, "")}/pay/${invoiceRecord.public_token}`;
+
+
+        console.log('GENERATED PAY URL:', payUrl);
+
+        const doc = new PDFDocument({
+            margin: 48,
+            size: "A4",
+            info: {
+                Title: `${merchant.name} ${po.poReference} Invoice`,
+                Author: `${merchant.name} - Powered by PayVerify`,
+            },
+        });
         const buffers: Buffer[] = [];
         doc.on("data", buffers.push.bind(buffers));
+        doc.registerFont("InvoiceSans", resolvePdfFont());
+        doc.font("InvoiceSans");
 
-        const isPaid =
-            invoiceRecord.status?.toLowerCase() === "paid" ||
-            invoiceRecord.status?.toLowerCase() === "completed";
-
-        // Watermark
-        doc.save();
-        doc.fontSize(80)
-            .fillOpacity(isPaid ? 0.12 : 0.08)
-            .fillColor(isPaid ? "#28A745" : "#CCCCCC")
-            .rotate(-45, {
-                origin: [doc.page.width / 2, doc.page.height / 2],
-            });
-
-        doc.text(
-            isPaid ? "PAID" : "PAYVERIFY",
-            doc.page.width / 2 - 180,
-            doc.page.height / 2 - 100,
-            { align: "center", width: 360 }
+        const isPaid = ["paid", "completed"].includes(
+            String(invoiceRecord.status || "").toLowerCase()
         );
+        const navy = "#07152D";
+        const blue = "#2F6FED";
+        const green = "#16A36A";
+        const ink = "#15233B";
+        const muted = "#65738B";
+        const light = "#F3F7FD";
+        const pageWidth = doc.page.width;
+        const contentWidth = pageWidth - 96;
 
-        doc.restore();
-        doc.fillOpacity(1);
+        doc.rect(0, 0, pageWidth, 154).fill(navy);
+        doc.circle(pageWidth - 35, 10, 105).fillOpacity(.10).fill(blue);
+        doc.fillOpacity(1).image(resolvePdfLogo(), 48, 35, { width: 144, height: 48 });
+        doc.fillColor("#8FB8FF").fontSize(9)
+            .text("VERIFIED MERCHANT INVOICE", 210, 38, { characterSpacing: 1.5 });
+        doc.fillColor("#FFFFFF").fontSize(22).text(merchant.name, 210, 58, {
+            width: 210,
+            ellipsis: true,
+        });
+        doc.fillColor("#AFC4E8").fontSize(10).text("Powered by PayVerify", 210, 91);
 
-        // Header
-        doc.roundedRect(440, 45, 120, 35, 5)
-            .fillColor(isPaid ? "#28A745" : "#FF0000")
-            .fill();
+        doc.roundedRect(438, 48, 108, 33, 16).fill(isPaid ? green : "#D98714");
+        doc.fillColor("#FFFFFF").fontSize(11).text(isPaid ? "PAID" : "PENDING", 438, 59, {
+            width: 108,
+            align: "center",
+        });
 
-        doc.fillColor("#FFFFFF")
-            .fontSize(16)
-            .font("Helvetica-Bold")
-            .text(isPaid ? "PAID" : "PENDING", 460, 53, {
-                width: 80,
-                align: "center",
-            });
+        doc.roundedRect(48, 126, contentWidth, 130, 14)
+            .fillAndStroke("#FFFFFF", "#DDE6F3");
+        doc.fillColor(ink).fontSize(18).text("INVOICE", 70, 149);
+        doc.fillColor(muted).fontSize(9).text("INVOICE NUMBER", 70, 181);
+        doc.fillColor(ink).fontSize(11).text(invoiceNumber, 70, 196);
+        doc.fillColor(muted).fontSize(9).text("PURCHASE ORDER", 255, 181);
+        doc.fillColor(ink).fontSize(11).text(po.poReference || `PO-${po.id}`, 255, 196);
+        doc.fillColor(muted).fontSize(9).text("ISSUED", 430, 181);
+        doc.fillColor(ink).fontSize(11).text(
+            new Date(invoiceRecord.issued_at).toLocaleDateString("en-NG", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            }),
+            430,
+            196
+        );
+        doc.fillColor(muted).fontSize(9).text("CUSTOMER", 70, 218);
+        doc.fillColor(ink).fontSize(10).text(customerName, 70, 232, {
+            width: 450,
+            ellipsis: true,
+        });
 
-        doc.moveDown(2);
+        let y = 294;
+        doc.roundedRect(48, y, contentWidth, 34, 8).fill(light);
+        doc.fillColor(muted).fontSize(9);
+        doc.text("ITEM", 64, y + 12, { width: 240 });
+        doc.text("QTY", 320, y + 12, { width: 45, align: "center" });
+        doc.text("UNIT PRICE", 374, y + 12, { width: 82, align: "right" });
+        doc.text("TOTAL", 464, y + 12, { width: 82, align: "right" });
+        y += 45;
 
-        doc.fontSize(24)
-            .fillColor("#000")
-            .font("Helvetica-Bold")
-            .text("PAYVERIFY INVOICE", 50, 120);
-
-        doc.fontSize(10).font("Helvetica");
-
-        doc.text(`Invoice #: ${invoiceNumber}`, 50, 155);
-        doc.text(`PaymentIntent ID: ${intent.id}`, 50, 170);
-        doc.text(`Purchase Order ID: ${po.id}`, 50, 185);
-
-        // ✅ INSERT HERE (line items + totals)
-
-        // ===============================
-        // 🔥 LINE ITEMS TABLE
-        // ===============================
-        let y = 230;
-
-        doc.font("Helvetica-Bold").fontSize(11);
-
-        doc.text("Item", 50, y);
-        doc.text("Qty", 250, y);
-        doc.text("Unit Price", 320, y);
-        doc.text("Total", 430, y);
-
-        y += 15;
-
-        doc.moveTo(50, y).lineTo(550, y).stroke();
-
-        y += 10;
-
-        doc.font("Helvetica").fontSize(10);
-
-        if (!normalizedItems || normalizedItems.length === 0) {
-            doc.text("No items available", 50, y);
-            y += 20;
+        doc.fillColor(ink).fontSize(10);
+        if (normalizedItems.length === 0) {
+            doc.fillColor(muted).text("No line items available", 64, y);
+            y += 32;
         } else {
-            normalizedItems.forEach(item => {
-                doc.text(item.name, 50, y);
-                doc.text(String(item.quantity), 250, y);
-                doc.text(formatNaira(item.unitPrice), 320, y);
-                doc.text(formatNaira(item.lineTotal), 430, y);
-                y += 20;
+            normalizedItems.forEach((item, index) => {
+                doc.fillColor(ink).text(item.name, 64, y, { width: 238 });
+                doc.text(String(item.quantity), 320, y, { width: 45, align: "center" });
+                doc.text(formatNaira(item.unitPrice), 374, y, { width: 82, align: "right" });
+                doc.text(formatNaira(item.lineTotal), 464, y, { width: 82, align: "right" });
+                y += 27;
+                if (index < normalizedItems.length - 1) {
+                    doc.moveTo(64, y - 8).lineTo(546, y - 8)
+                        .strokeColor("#E8EEF7").stroke();
+                }
             });
         }
 
-        // ===============================
-        // 🔥 TOTALS
-        // ===============================
-        y += 10;
+        y += 14;
+        doc.roundedRect(322, y, 224, 82, 12).fill(light);
+        doc.fillColor(muted).fontSize(9).text("ORDER SUBTOTAL", 340, y + 17);
+        doc.fillColor(ink).fontSize(10).text(formatNaira(subtotal), 430, y + 17, {
+            width: 98,
+            align: "right",
+        });
+        doc.fillColor(ink).fontSize(12).text("AMOUNT DUE", 340, y + 48);
+        doc.fillColor(blue).fontSize(14).text(formatNaira(grandTotal), 420, y + 46, {
+            width: 108,
+            align: "right",
+        });
 
-        doc.moveTo(300, y).lineTo(550, y).stroke();
-
-        y += 10;
-
-        doc.font("Helvetica-Bold");
-
-        doc.text("Subtotal:", 320, y);
-        doc.text(formatNaira(subtotal), 430, y);
-
-        y += 20;
-
-        doc.text("Tax (7.5%):", 320, y);
-        doc.text(formatNaira(tax), 430, y);
-
-        y += 20;
-
-        doc.fontSize(12);
-
-        doc.text("Total:", 320, y);
-        doc.text(formatNaira(grandTotal), 430, y);
-
-        doc.fontSize(10);
-
-        // Pay link
-        if (!isPaid) {
-            doc.moveDown(2);
-
-            doc.fillColor("#2563eb")
-                .font("Helvetica-Bold")
-                .fontSize(12)
-                .text("Click here to Pay Now", {
-                    link: payUrl,
-                    underline: true,
-                });
-
-            doc.fillColor("#000");
+        y += 112;
+        const qrBuffer = await this.generateQRCodeBuffer(payUrl);
+        if (qrBuffer.length) {
+            doc.roundedRect(48, y, contentWidth, 118, 14).fillAndStroke(navy, navy);
+            doc.image(qrBuffer, 66, y + 17, { width: 84, height: 84 });
+            doc.fillColor("#FFFFFF").fontSize(14).text(
+                isPaid ? "Payment verified" : "Pay this invoice securely",
+                174,
+                y + 27
+            );
+            doc.fillColor("#ABC0E3").fontSize(9).text(
+                isPaid
+                    ? "This transaction has been verified by PayVerify."
+                    : "Scan the QR code or use the secure link below.",
+                174,
+                y + 52,
+                { width: 340 }
+            );
+            if (!isPaid) {
+                doc.fillColor("#7FB0FF").fontSize(10).text(
+                    "Open secure payment page",
+                    174,
+                    y + 78,
+                    { link: payUrl, underline: true }
+                );
+            }
         }
+
+        doc.fillColor(muted).fontSize(8).text(
+            `${merchant.name} • Powered by PayVerify • Secure merchant verification and payment`,
+            48,
+            770,
+            { width: contentWidth, align: "center" }
+        );
 
         doc.end();
 

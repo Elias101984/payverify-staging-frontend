@@ -1,940 +1,81 @@
-﻿//////// src/services/PurchaseOrderService.ts
-
-///////**
-////// * =============================================================================
-////// * PurchaseOrderService (SAFE + CLEAN VERSION)
-////// * =============================================================================
-////// *
-////// * What this fixes (and why)
-////// * 1) Removes ANY PaymentIntent references from this file
-////// *    - Your recent compile errors show PurchaseOrderService.ts referencing PaymentIntent
-////// *      which breaks because DatabaseModels does not include PaymentIntent.
-////// *
-////// * 2) Keeps the correct NAMED EXPORT:
-////// *    export class PurchaseOrderService
-////// *    - Fixes TS2305: "has no exported member 'PurchaseOrderService'"
-////// *
-////// * 3) Preserves your existing behavior:
-////// *    - Explicit mapping (prevents NOT NULL issues)
-////// *    - Transaction safety
-////// *    - Items creation
-////// *    - Includes merchant in fetch
-////// *
-////// * IMPORTANT:
-////// * PaymentIntent creation must happen in the controller layer (approval flow),
-////// * NOT inside this service, to preserve SRP and avoid model type coupling.
-////// * =============================================================================
-////// */
-
-//////import { Sequelize, Transaction } from 'sequelize';
-//////import { DatabaseModels } from '../types';
-
-//////export class PurchaseOrderService {
-
-//////    private models: DatabaseModels;
-//////    private sequelize: Sequelize;
-
-//////    constructor(models: DatabaseModels, sequelize: Sequelize) {
-//////        this.models = models;
-//////        this.sequelize = sequelize;
-//////    }
-
-//////    /**
-//////     * =========================================================================
-//////     * CREATE PURCHASE ORDER
-//////     * =========================================================================
-//////     */
-//////    async createPurchaseOrder(data: any): Promise<any> {
-
-//////        const transaction: Transaction =
-//////            await this.sequelize.transaction();
-
-//////        try {
-
-//////            // -----------------------------------------------------------------
-//////            // Generate poReference if missing
-//////            // -----------------------------------------------------------------
-//////            const poReference =
-//////                data.poReference ??
-//////                `PO-${data.merchantId ?? 'ADMIN'}-${Date.now()}`;
-
-//////            // -----------------------------------------------------------------
-//////            // Calculate totalAmount safely
-//////            // -----------------------------------------------------------------
-//////            let totalAmount = 0;
-
-//////            if (Array.isArray(data.items)) {
-
-//////                totalAmount =
-//////                    data.items.reduce(
-//////                        (sum: number, item: any) => {
-
-//////                            const quantity =
-//////                                Number(item.quantity) || 0;
-
-//////                            const unitPrice =
-//////                                Number(item.unitPrice) || 0;
-
-//////                            return sum + (quantity * unitPrice);
-//////                        },
-//////                        0
-//////                    );
-//////            }
-
-//////            // -----------------------------------------------------------------
-//////            // CRITICAL:
-//////            // DO NOT pass raw "data"
-//////            // Map explicitly to DB model fields
-//////            // -----------------------------------------------------------------
-//////            const purchaseOrder =
-//////                await this.models.PurchaseOrder.create({
-
-//////                    poReference: poReference,
-
-//////                    // NOTE:
-//////                    // If merchantId is missing, this will become NaN.
-//////                    // You should enforce merchantId in controller or resolve it there.
-//////                    merchantId:
-//////                        Number(data.merchantId),
-
-//////                    // Sequelize DECIMAL should be string
-//////                    totalAmount:
-//////                        String(totalAmount),
-
-//////                    description:
-//////                        data.description ?? null,
-
-//////                    dueDate:
-//////                        data.dueDate ?? null,
-
-//////                    status:
-//////                        data.status ?? 'pending'
-
-//////                }, { transaction });
-
-//////            const purchaseOrderId: number =
-//////                purchaseOrder.getDataValue('id');
-
-//////            // -----------------------------------------------------------------
-//////            // Create PurchaseOrderItems
-//////            // -----------------------------------------------------------------
-//////            if (Array.isArray(data.items)) {
-
-//////                for (const item of data.items) {
-
-//////                    const quantity =
-//////                        Number(item.quantity);
-
-//////                    const unitPrice =
-//////                        Number(item.unitPrice);
-
-//////                    const lineTotal =
-//////                        quantity * unitPrice;
-
-//////                    await this.models.PurchaseOrderItem.create({
-
-//////                        purchaseOrderId,
-
-//////                        itemName:
-//////                            item.itemName,
-
-//////                        quantity:
-//////                            quantity,
-
-//////                        unitPrice:
-//////                            String(unitPrice),
-
-//////                        lineTotal:
-//////                            String(lineTotal),
-
-//////                        description:
-//////                            item.description ?? null
-
-//////                    }, { transaction });
-//////                }
-//////            }
-
-//////            await transaction.commit();
-
-//////            return await this.getPurchaseOrderById(
-//////                purchaseOrderId
-//////            );
-//////        }
-//////        catch (error) {
-
-//////            await transaction.rollback();
-
-//////            console.error(
-//////                "PurchaseOrder CREATE ERROR:",
-//////                error
-//////            );
-
-//////            throw error;
-//////        }
-//////    }
-
-//////    /**
-//////     * =========================================================================
-//////     * GET PURCHASE ORDER BY ID
-//////     * =========================================================================
-//////     */
-//////    async getPurchaseOrderById(id: number): Promise<any> {
-
-//////        return this.models.PurchaseOrder.findByPk(id, {
-
-//////            include: [
-//////                {
-//////                    model: this.models.PurchaseOrderItem,
-//////                    as: 'items'
-//////                },
-//////                {
-//////                    model: this.models.Merchant,
-//////                    as: 'merchant'
-//////                }
-//////            ]
-//////        });
-//////    }
-
-//////    /**
-//////     * =========================================================================
-//////     * GET ALL PURCHASE ORDERS
-//////     * =========================================================================
-//////     */
-//////    async getAllPurchaseOrders(
-//////        filter: any = {},
-//////        page: number = 1,
-//////        limit: number = 10
-//////    ) {
-
-//////        const offset = (page - 1) * limit;
-
-//////        const result =
-//////            await this.models.PurchaseOrder.findAndCountAll({
-
-//////                where: filter,
-
-//////                include: [
-//////                    {
-//////                        model: this.models.PurchaseOrderItem,
-//////                        as: 'items'
-//////                    },
-//////                    {
-//////                        model: this.models.Merchant,
-//////                        as: 'merchant'
-//////                    }
-//////                ],
-
-//////                offset,
-//////                limit,
-
-//////                order: [['createdAt', 'DESC']]
-//////            });
-
-//////        return {
-//////            purchaseOrders: result.rows,
-//////            total: result.count
-//////        };
-//////    }
-
-//////    /**
-//////     * =========================================================================
-//////     * UPDATE PURCHASE ORDER
-//////     * =========================================================================
-//////     */
-//////    async updatePurchaseOrder(id: number, updateData: any) {
-
-//////        if (updateData.totalAmount !== undefined) {
-//////            updateData.totalAmount = String(updateData.totalAmount);
-//////        }
-
-//////        await this.models.PurchaseOrder.update(
-//////            updateData,
-//////            { where: { id } }
-//////        );
-
-//////        return this.getPurchaseOrderById(id);
-//////    }
-
-//////    /**
-//////     * =========================================================================
-//////     * DELETE PURCHASE ORDER
-//////     * =========================================================================
-//////     */
-//////    async deletePurchaseOrder(id: number): Promise<boolean> {
-
-//////        await this.models.PurchaseOrderItem.destroy({
-//////            where: { purchaseOrderId: id }
-//////        });
-
-//////        await this.models.PurchaseOrder.destroy({
-//////            where: { id }
-//////        });
-
-//////        return true;
-//////    }
-
-//////    /**
-//////     * =========================================================================
-//////     * ADD ITEM
-//////     * =========================================================================
-//////     */
-//////    async addItemToPurchaseOrder(id: number, item: any) {
-
-//////        const quantity =
-//////            Number(item.quantity);
-
-//////        const unitPrice =
-//////            Number(item.unitPrice);
-
-//////        const lineTotal =
-//////            quantity * unitPrice;
-
-//////        await this.models.PurchaseOrderItem.create({
-
-//////            purchaseOrderId: id,
-
-//////            itemName:
-//////                item.itemName,
-
-//////            quantity:
-//////                quantity,
-
-//////            unitPrice:
-//////                String(unitPrice),
-
-//////            lineTotal:
-//////                String(lineTotal),
-
-//////            description:
-//////                item.description ?? null
-//////        });
-
-//////        return this.getPurchaseOrderById(id);
-//////    }
-
-//////    /**
-//////     * =========================================================================
-//////     * UPDATE STATUS
-//////     * =========================================================================
-//////     */
-//////    async updatePurchaseOrderStatus(id: number, status: string) {
-
-//////        await this.models.PurchaseOrder.update(
-//////            { status },
-//////            { where: { id } }
-//////        );
-
-//////        return this.getPurchaseOrderById(id);
-//////    }
-
-//////    /**
-//////     * =========================================================================
-//////     * GET PURCHASE ORDER STATS
-//////     * =========================================================================
-//////     */
-//////    async getPurchaseOrderStats() {
-
-//////        const { PurchaseOrder } = this.models;
-
-//////        const totalOrders =
-//////            await PurchaseOrder.count();
-
-//////        const totalValue =
-//////            await PurchaseOrder.sum('totalAmount') || 0;
-
-//////        const pending =
-//////            await PurchaseOrder.count({
-//////                where: { status: 'pending' }
-//////            });
-
-//////        const completed =
-//////            await PurchaseOrder.count({
-//////                where: { status: 'completed' }
-//////            });
-
-//////        return {
-//////            totalOrders,
-//////            totalValue,
-//////            pending,
-//////            completed
-//////        };
-//////    }
-
-
-//////}
-
-
-
-////// =============================================================================
-////// InvoiceService
-////// =============================================================================
-//////
-////// PURPOSE
-////// Handles all invoice lifecycle operations:
-//////
-////// 1. Generate PDF invoice from PaymentIntent
-////// 2. Create Invoice record after successful payment (Webhook)
-//////
-////// FULLY COMPATIBLE WITH:
-//////
-////// • PaymentIntent model
-////// • PurchaseOrder model
-////// • PurchaseOrderItem model
-////// • Paystack webhook flow
-////// • Receipt download endpoint
-//////
-////// =============================================================================
-
-////import PDFDocument from "pdfkit";
-////import { Buffer } from "buffer";
-
-////// Named Sequelize model imports
-////import { PaymentIntent } from "../models/PaymentIntent";
-////import PurchaseOrder from "../models/PurchaseOrder";
-////import { PurchaseOrderItem } from "../models/PurchaseOrderItem";
-////import { Invoice } from "../models/Invoice";
-
-////export class InvoiceService {
-
-////    // =============================================================================
-////    // Generate PDF Invoice
-////    // =============================================================================
-////    //
-////    // PURPOSE
-////    // Creates a proper PDF invoice based on PaymentIntent and PurchaseOrder data
-////    //
-////    // RETURNS
-////    // PDF Buffer for download or email
-////    //
-////    // =============================================================================
-
-////    async generateInvoicePdf(
-////        paymentIntentId: number
-////    ): Promise<Buffer> {
-
-////        if (!paymentIntentId)
-////            throw new Error("Valid PaymentIntent id required");
-
-
-////        // =============================================================================
-////        // Load PaymentIntent
-////        // =============================================================================
-
-////        const intent =
-////            await PaymentIntent.findByPk(
-////                paymentIntentId
-////            );
-
-////        if (!intent)
-////            throw new Error("PaymentIntent not found");
-
-
-////        // =============================================================================
-////        // Load Purchase Order
-////        // =============================================================================
-
-////        const po =
-////            await PurchaseOrder.findByPk(
-////                intent.purchase_order_id
-////            );
-
-////        if (!po)
-////            throw new Error("PurchaseOrder not found");
-
-
-////        // =============================================================================
-////        // Load Line Items
-////        // =============================================================================
-
-////        const items =
-////            await PurchaseOrderItem.findAll({
-
-////                where: {
-////                    purchaseOrderId: po.id
-////                }
-
-////            });
-
-
-////        // =============================================================================
-////        // Create PDF
-////        // =============================================================================
-
-////        const doc =
-////            new PDFDocument({
-
-////                size: "A4",
-////                margin: 50
-
-////            });
-
-////        const buffers: Buffer[] = [];
-
-////        doc.on(
-////            "data",
-////            buffers.push.bind(buffers)
-////        );
-
-
-////        // =============================================================================
-////        // Header
-////        // =============================================================================
-
-////        doc.fontSize(22)
-////            .text("PayVerify Invoice", {
-////                align: "center"
-////            });
-
-////        doc.moveDown();
-
-////        doc.fontSize(12)
-////            .text(`Invoice Date: ${new Date().toLocaleString()}`);
-
-////        doc.text(`PaymentIntent ID: ${intent.id}`);
-
-////        doc.text(`Purchase Order ID: ${po.id}`);
-
-////        doc.moveDown();
-
-
-////        // =============================================================================
-////        // Line Items
-////        // =============================================================================
-
-////        doc.fontSize(14)
-////            .text("Line Items");
-
-////        doc.moveDown();
-
-////        doc.fontSize(12);
-
-////        let total = 0;
-
-////        items.forEach((item: any) => {
-
-////            const lineTotal =
-////                Number(item.quantity) *
-////                Number(item.unitPrice);
-
-////            total += lineTotal;
-
-////            doc.text(
-////                `${item.description}  |  Qty: ${item.quantity}  |  Unit: ₦${item.unitPrice}  |  Total: ₦${lineTotal}`
-////            );
-
-////        });
-
-
-////        doc.moveDown();
-
-
-////        // =============================================================================
-////        // Total
-////        // =============================================================================
-
-////        doc.fontSize(16)
-////            .text(
-////                `TOTAL: ₦${total.toLocaleString()}`,
-////                { align: "right" }
-////            );
-
-
-////        doc.moveDown();
-
-
-////        // =============================================================================
-////        // Footer
-////        // =============================================================================
-
-////        doc.fontSize(10)
-////            .text(
-////                "Powered by PayVerify",
-////                { align: "center" }
-////            );
-
-
-////        doc.end();
-
-
-////        // =============================================================================
-////        // Return PDF Buffer
-////        // =============================================================================
-
-////        return new Promise((resolve) => {
-
-////            doc.on(
-////                "end",
-////                () => resolve(
-////                    Buffer.concat(buffers)
-////                )
-////            );
-
-////        });
-
-////    }
-
-
-////    // =============================================================================
-////    // Create Invoice Record from PaymentIntent
-////    // =============================================================================
-////    //
-////    // PURPOSE
-////    // Called automatically by Paystack webhook after successful payment.
-////    //
-////    // This creates the official Invoice record in the database.
-////    //
-////    // DOES NOT generate PDF here.
-////    //
-////    // PDF is generated only when requested.
-////    //
-////    // =============================================================================
-
-////    async createFromPaymentIntent(
-////        paymentIntentId: number
-////    ): Promise<any> {
-
-////        if (!paymentIntentId)
-////            throw new Error(
-////                "PaymentIntent id required"
-////            );
-
-
-////        // =============================================================================
-////        // Load PaymentIntent
-////        // =============================================================================
-
-////        const intent =
-////            await PaymentIntent.findByPk(
-////                paymentIntentId
-////            );
-
-////        if (!intent)
-////            throw new Error(
-////                "PaymentIntent not found"
-////            );
-
-
-////        // =============================================================================
-////        // Prevent duplicate invoice creation
-////        // =============================================================================
-
-////        const existing =
-////            await Invoice.findOne({
-
-////                where: {
-////                    payment_intent_id:
-////                        paymentIntentId
-////                }
-
-////            });
-
-////        if (existing)
-////            return existing;
-
-
-////        // =============================================================================
-////        // Create Invoice Record
-////        // =============================================================================
-
-////        const invoice =
-////            await Invoice.create({
-
-////                payment_intent_id:
-////                    intent.id,
-
-////                merchant_id:
-////                    intent.merchant_id,
-
-////                amount:
-////                    intent.amount,
-
-////                status:
-////                    "paid",
-
-////                issued_at:
-////                    new Date()
-
-////            });
-
-////        return invoice;
-
-////    }
-
-////}
-
-
-
-///**
-// * =============================================================================
-// * PurchaseOrderService (CLEAN SRP VERSION)
-// * =============================================================================
-// *
-// * 🔧 WHAT CHANGED (IMPORTANT)
-// * -----------------------------------------------------------------------------
-// * 1. ❌ REMOVED InvoiceService code from this file
-// *    - Previously this file incorrectly contained Invoice logic
-// *    - Violated SRP and broke TS imports
-// *
-// * 2. ❌ REMOVED pdfkit, PaymentIntent, Invoice imports
-// *    - PurchaseOrderService must NOT know about payments or invoices
-// *    - Prevents circular dependencies and future scaling issues
-// *
-// * 3. ✅ RESTORED proper PurchaseOrder domain responsibility
-// *
-// * 4. ✅ ENSURED named export:
-// *        export class PurchaseOrderService
-// *    - Fixes TS2305 "no exported member"
-// *
-// * 5. ✅ PRESERVED transaction safety and explicit mapping
-// *
-// * ARCHITECTURE RULE
-// * -----------------------------------------------------------------------------
-// * PurchaseOrderService → manages orders only
-// * InvoiceService       → manages invoices only
-// * PaymentIntentService → manages payment intents
-// *
-// * =============================================================================
-// */
-
-//import { Sequelize, Transaction } from "sequelize";
-//import { DatabaseModels } from "../types";
-
-//export class PurchaseOrderService {
-//    private models: DatabaseModels;
-//    private sequelize: Sequelize;a
-
-//    constructor(models: DatabaseModels, sequelize: Sequelize) {
-//        this.models = models;
-//        this.sequelize = sequelize;
-//    }
-
-//    /**
-//     * =========================================================================
-//     * CREATE PURCHASE ORDER
-//     * =========================================================================
-//     */
-//    async createPurchaseOrder(data: any): Promise<any> {
-//        const transaction: Transaction = await this.sequelize.transaction();
-
-//        try {
-//            // ---------------------------------------------------------------------
-//            // Generate PO reference safely
-//            // ---------------------------------------------------------------------
-//            const poReference =
-//                data.poReference ??
-//                `PO-${data.merchantId ?? "ADMIN"}-${Date.now()}`;
-
-//            // ---------------------------------------------------------------------
-//            // Calculate total safely
-//            // ---------------------------------------------------------------------
-//            let totalAmount = 0;
-
-//            if (Array.isArray(data.items)) {
-//                totalAmount = data.items.reduce((sum: number, item: any) => {
-//                    const quantity = Number(item.quantity) || 0;
-//                    const unitPrice = Number(item.unitPrice) || 0;
-//                    return sum + quantity * unitPrice;
-//                }, 0);
-//            }
-
-//            // ---------------------------------------------------------------------
-//            // Explicit DB mapping (prevents NOT NULL issues)
-//            // ---------------------------------------------------------------------
-//            const purchaseOrder = await this.models.PurchaseOrder.create(
-//                {
-//                    poReference,
-//                    merchantId: Number(data.merchantId),
-//                    totalAmount: String(totalAmount), // DECIMAL safety
-//                    description: data.description ?? null,
-//                    dueDate: data.dueDate ?? null,
-//                    status: data.status ?? "pending",
-//                },
-//                { transaction }
-//            );
-
-//            const purchaseOrderId: number =
-//                purchaseOrder.getDataValue("id");
-
-//            // ---------------------------------------------------------------------
-//            // Create line items
-//            // ---------------------------------------------------------------------
-//            if (Array.isArray(data.items)) {
-//                for (const item of data.items) {
-//                    const quantity = Number(item.quantity);
-//                    const unitPrice = Number(item.unitPrice);
-//                    const lineTotal = quantity * unitPrice;
-
-//                    await this.models.PurchaseOrderItem.create(
-//                        {
-//                            purchaseOrderId,
-//                            itemName: item.itemName,
-//                            quantity,
-//                            unitPrice: String(unitPrice),
-//                            lineTotal: String(lineTotal),
-//                            description: item.description ?? null,
-//                        },
-//                        { transaction }
-//                    );
-//                }
-//            }
-
-//            await transaction.commit();
-
-//            return await this.getPurchaseOrderById(purchaseOrderId);
-//        } catch (error) {
-//            await transaction.rollback();
-
-//            console.error("PurchaseOrder CREATE ERROR:", error);
-//            throw error;
-//        }
-//    }
-
-//    /**
-//     * =========================================================================
-//     * GET PURCHASE ORDER BY ID
-//     * =========================================================================
-//     */
-//    async getPurchaseOrderById(id: number): Promise<any> {
-//        return this.models.PurchaseOrder.findByPk(id, {
-//            include: [
-//                { model: this.models.PurchaseOrderItem, as: "items" },
-//                { model: this.models.Merchant, as: "merchant" },
-//            ],
-//        });
-//    }
-
-//    /**
-//     * =========================================================================
-//     * GET ALL PURCHASE ORDERS (paginated)
-//     * =========================================================================
-//     */
-//    async getAllPurchaseOrders(
-//        filter: any = {},
-//        page: number = 1,
-//        limit: number = 10
-//    ) {
-//        const offset = (page - 1) * limit;
-
-//        const result = await this.models.PurchaseOrder.findAndCountAll({
-//            where: filter,
-//            include: [
-//                { model: this.models.PurchaseOrderItem, as: "items" },
-//                { model: this.models.Merchant, as: "merchant" },
-//            ],
-//            offset,
-//            limit,
-//            order: [["createdAt", "DESC"]],
-//        });
-
-//        return {
-//            purchaseOrders: result.rows,
-//            total: result.count,
-//        };
-//    }
-
-//    /**
-//     * =========================================================================
-//     * UPDATE PURCHASE ORDER
-//     * =========================================================================
-//     */
-//    async updatePurchaseOrder(id: number, updateData: any) {
-//        if (updateData.totalAmount !== undefined) {
-//            updateData.totalAmount = String(updateData.totalAmount);
-//        }
-
-//        await this.models.PurchaseOrder.update(updateData, {
-//            where: { id },
-//        });
-
-//        return this.getPurchaseOrderById(id);
-//    }
-
-//    /**
-//     * =========================================================================
-//     * DELETE PURCHASE ORDER
-//     * =========================================================================
-//     */
-//    async deletePurchaseOrder(id: number): Promise<boolean> {
-//        await this.models.PurchaseOrderItem.destroy({
-//            where: { purchaseOrderId: id },
-//        });
-
-//        await this.models.PurchaseOrder.destroy({
-//            where: { id },
-//        });
-
-//        return true;
-//    }
-
-//    /**
-//     * =========================================================================
-//     * UPDATE STATUS
-//     * =========================================================================
-//     */
-//    async updatePurchaseOrderStatus(id: number, status: string) {
-//        await this.models.PurchaseOrder.update(
-//            { status },
-//            { where: { id } }
-//        );
-
-//        return this.getPurchaseOrderById(id);
-//    }
-
-//    /**
-//     * =========================================================================
-//     * STATS
-//     * =========================================================================
-//     */
-//    async getPurchaseOrderStats() {
-//        const { PurchaseOrder } = this.models;
-
-//        const totalOrders = await PurchaseOrder.count();
-//        const totalValue = (await PurchaseOrder.sum("totalAmount")) || 0;
-
-//        const pending = await PurchaseOrder.count({
-//            where: { status: "pending" },
-//        });
-
-//        const completed = await PurchaseOrder.count({
-//            where: { status: "completed" },
-//        });
-
-//        return {
-//            totalOrders,
-//            totalValue,
-//            pending,
-//            completed,
-//        };
-//    }
-//}
-
-
+﻿/**
+ * =============================================================================
+ * src/services/PurchaseOrderService.ts
+ * PurchaseOrderService (MERCHANT-ISOLATED / PRODUCTION-SAFE VERSION)
+ * =============================================================================
+ *
+ * WHAT THIS VERSION PRESERVES
+ * -----------------------------------------------------------------------------
+ * ✅ Creates purchase orders and line items inside a database transaction
+ * ✅ Recalculates totals on the server
+ * ✅ Supports the Continue Order workflow by updating the existing PO
+ * ✅ Returns purchase orders with their items and merchant
+ * ✅ Preserves pagination
+ * ✅ Supports add-item, delete, cancellation/status compatibility, and statistics
+ * ✅ Keeps PaymentIntent and Invoice creation outside this service
+ *
+ * CRITICAL SECURITY CHANGES
+ * -----------------------------------------------------------------------------
+ * ✅ Every read, update, status change, item addition, and delete is scoped by:
+ *
+ *      purchaseOrder.id + authenticated merchantId
+ *
+ * ✅ A merchant can no longer retrieve another merchant's order by guessing its ID.
+ * ✅ A merchant can no longer edit, approve, reject, add items to, or delete another
+ *    merchant's purchase order.
+ * ✅ Statistics are calculated only from the authenticated merchant's orders.
+ * ✅ Client-supplied merchantId is not used for ownership checks after creation.
+ *
+ * WHY THIS CHANGE WAS REQUIRED
+ * -----------------------------------------------------------------------------
+ * QA found that a newly registered merchant could:
+ *
+ * 1. View purchase orders belonging to other merchants.
+ * 2. Approve or reject purchase orders belonging to other merchants. (The
+ *    per-order approval flow has since been retired.)
+ *
+ * Filtering only in the React UI would not fix the vulnerability. Ownership must
+ * be enforced in the backend database queries, which this service now does.
+ *
+ * EXPECTED CONTROLLER METHOD CALLS
+ * -----------------------------------------------------------------------------
+ * getPurchaseOrderById(id, merchantId)
+ * updatePurchaseOrder(id, merchantId, updateData)
+ * updatePurchaseOrderStatus(id, merchantId, status)
+ * deletePurchaseOrder(id, merchantId)
+ * addItemToPurchaseOrder(id, merchantId, item)
+ * getPurchaseOrderStats(merchantId)
+ *
+ * IMPORTANT ARCHITECTURE RULE
+ * -----------------------------------------------------------------------------
+ * This service manages purchase orders only.
+ * PaymentIntent and Invoice creation remain in the controller/payment services.
+ * =============================================================================
+ */
 
 /**
- * =============================================================================
- * PurchaseOrderService (PRODUCTION-SAFE VERSION)
- * =============================================================================
- *
- * 🔧 WHAT CHANGED (NEW IN THIS VERSION)
+ * PAYMENT RESUME ARCHITECTURE NOTE
  * -----------------------------------------------------------------------------
- * ✅ FIXED: stray character after sequelize property (build breaker)
- * ✅ ADDED: addItemToPurchaseOrder (required by controller)
- * ✅ ADDED: automatic total recalculation after item insert
- * ✅ ADDED: transaction safety for item addition
- * ✅ HARDENED: numeric parsing and DECIMAL handling
- * ✅ PRESERVED: SRP (no payment/invoice coupling)
+ * No Invoice or PaymentIntent Sequelize includes are added to this service.
  *
- * =============================================================================
+ * WHY:
+ * - DatabaseModels does not expose Invoice or PaymentIntent.
+ * - PurchaseOrderService remains responsible only for merchant-scoped PO data.
+ * - PurchaseOrderController should load and attach the related PaymentIntent
+ *   and Invoice when returning the PO details response.
+ *
+ * This prevents TypeScript errors such as:
+ *   Property 'Invoice' does not exist on type 'DatabaseModels'.
+ *   Property 'PaymentIntent' does not exist on type 'DatabaseModels'.
+ * -----------------------------------------------------------------------------
  */
 
 import { Sequelize, Transaction } from "sequelize";
 import { DatabaseModels } from "../types";
 
 export class PurchaseOrderService {
-    private models: DatabaseModels;
-
-    // ✅ FIXED: removed stray character that was breaking build
-    private sequelize: Sequelize;
+    private readonly models: DatabaseModels;
+    private readonly sequelize: Sequelize;
 
     constructor(models: DatabaseModels, sequelize: Sequelize) {
         this.models = models;
@@ -942,150 +83,312 @@ export class PurchaseOrderService {
     }
 
     // =============================================================================
+    // SHARED VALIDATION HELPERS
+    // =============================================================================
+
+    /**
+     * Ensures an ID is a positive integer before it is used in a query.
+     */
+    private validatePositiveId(value: number, fieldName: string): void {
+        if (!Number.isInteger(value) || value <= 0) {
+            throw new Error(`A valid ${fieldName} is required.`);
+        }
+    }
+
+    /**
+     * Normalizes and validates one purchase-order line item.
+     *
+     * WHY:
+     * Totals must be calculated from validated quantity and unit price values on
+     * the server. The frontend must not be trusted to provide lineTotal.
+     */
+    private normalizeItem(item: any, index?: number): {
+        itemName: string;
+        description: string | null;
+        quantity: number;
+        unitPrice: number;
+        lineTotal: number;
+    } {
+        const itemPosition =
+            typeof index === "number" ? ` for line item ${index + 1}` : "";
+
+        const itemName = String(
+            item?.itemName ||
+            item?.name ||
+            ""
+        ).trim();
+
+        const quantity = Number(item?.quantity);
+        const unitPrice = Number(item?.unitPrice);
+
+        if (!itemName) {
+            throw new Error(`Item name is required${itemPosition}.`);
+        }
+
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            throw new Error(
+                `Quantity must be greater than zero${itemPosition}.`
+            );
+        }
+
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+            throw new Error(
+                `Unit price must be valid${itemPosition}.`
+            );
+        }
+
+        return {
+            itemName,
+            description: item?.description ?? null,
+            quantity,
+            unitPrice,
+            lineTotal: quantity * unitPrice,
+        };
+    }
+
+    // =============================================================================
     // CREATE PURCHASE ORDER
     // =============================================================================
+    //
+    // SECURITY:
+    // merchantId must already have been resolved by the controller from the
+    // authenticated JWT user. The frontend must not choose the merchant owner.
+    // =============================================================================
     async createPurchaseOrder(data: any): Promise<any> {
-        const transaction: Transaction = await this.sequelize.transaction();
+        const merchantId = Number(data.merchantId);
+        this.validatePositiveId(merchantId, "merchantId");
+
+        // `poReference` is the client request key for offline/retry-safe order
+        // capture.  The database column is already unique, so a reconnect can
+        // safely replay the same payload without creating a second order.
+        const suppliedPoReference = data.poReference == null
+            ? ""
+            : String(data.poReference).trim();
+        const poReference = suppliedPoReference || `PO-${merchantId}-${Date.now()}`;
+
+        if (poReference.length > 50) {
+            throw new Error("Purchase order reference must be 50 characters or fewer.");
+        }
+
+        if (suppliedPoReference) {
+            const existing = await this.models.PurchaseOrder.findOne({
+                where: {
+                    poReference,
+                    merchantId,
+                },
+            });
+
+            if (existing) {
+                return this.getPurchaseOrderById(
+                    Number(existing.getDataValue("id")),
+                    merchantId
+                );
+            }
+        }
+
+        const transaction: Transaction =
+            await this.sequelize.transaction();
 
         try {
-            const poReference =
-                data.poReference ??
-                `PO-${data.merchantId ?? "ADMIN"}-${Date.now()}`;
+            const rawItems = Array.isArray(data.items)
+                ? data.items
+                : [];
 
-            let totalAmount = 0;
-
-            if (Array.isArray(data.items)) {
-                totalAmount = data.items.reduce((sum: number, item: any) => {
-                    const quantity = Number(item.quantity) || 0;
-                    const unitPrice = Number(item.unitPrice) || 0;
-                    return sum + quantity * unitPrice;
-                }, 0);
-            }
-
-            const purchaseOrder = await this.models.PurchaseOrder.create(
-                {
-                    poReference,
-                    merchantId: Number(data.merchantId),
-                    totalAmount: String(totalAmount),
-                    description: data.description ?? null,
-                    dueDate: data.dueDate ?? null,
-                    status: data.status ?? "pending",
-                },
-                { transaction }
+            const normalizedItems = rawItems.map(
+                (item: any, index: number) =>
+                    this.normalizeItem(item, index)
             );
 
-            const purchaseOrderId: number =
-                purchaseOrder.getDataValue("id");
+            const totalAmount = normalizedItems.reduce(
+                (sum: number, item) => sum + item.lineTotal,
+                0
+            );
 
-            // create items
-            if (Array.isArray(data.items)) {
-                for (const item of data.items) {
-                    const quantity = Number(item.quantity);
-                    const unitPrice = Number(item.unitPrice);
-                    const lineTotal = quantity * unitPrice;
+            const purchaseOrder =
+                await this.models.PurchaseOrder.create(
+                    {
+                        poReference,
+                        merchantId,
+                        totalAmount: String(totalAmount),
+                        description: data.description ?? null,
+                        dueDate: data.dueDate ?? null,
+                        customerName: String(data.customerName || '').trim() || null,
+                        customerEmail: String(data.customerEmail || '').trim() || null,
+                        customerPhone: String(data.customerPhone || '').trim() || null,
 
-                    await this.models.PurchaseOrderItem.create(
-                        {
-                            purchaseOrderId,
-                            itemName: item.itemName,
-                            quantity,
-                            unitPrice: String(unitPrice),
-                            lineTotal: String(lineTotal),
-                            description: item.description ?? null,
-                        },
-                        { transaction }
-                    );
-                }
+                        // WHY:
+                        // New orders always begin as pending. A client must not
+                        // self-create an already approved or completed order.
+                        status: "pending",
+                    },
+                    { transaction }
+                );
+
+            const purchaseOrderId = Number(
+                purchaseOrder.getDataValue("id")
+            );
+
+            for (const item of normalizedItems) {
+                await this.models.PurchaseOrderItem.create(
+                    {
+                        purchaseOrderId,
+                        itemName: item.itemName,
+                        description: item.description,
+                        quantity: item.quantity,
+                        unitPrice: String(item.unitPrice),
+                        lineTotal: String(item.lineTotal),
+                    },
+                    { transaction }
+                );
             }
 
             await transaction.commit();
 
-            return await this.getPurchaseOrderById(purchaseOrderId);
+            // merchantId is included so the newly created record is still
+            // retrieved through the same ownership-safe method.
+            return await this.getPurchaseOrderById(
+                purchaseOrderId,
+                merchantId
+            );
         } catch (error) {
-            await transaction.rollback();
-            console.error("PurchaseOrder CREATE ERROR:", error);
+            if (!(transaction as any).finished) {
+                await transaction.rollback();
+            }
+
+            // Two reconnect attempts can arrive at the same time.  The unique
+            // `po_reference` constraint wins that race; return the order that
+            // was committed by the other request instead of surfacing a false
+            // failure to the merchant.
+            if (
+                suppliedPoReference &&
+                (error as any)?.name === "SequelizeUniqueConstraintError"
+            ) {
+                const existing = await this.models.PurchaseOrder.findOne({
+                    where: {
+                        poReference,
+                        merchantId,
+                    },
+                });
+
+                if (existing) {
+                    return this.getPurchaseOrderById(
+                        Number(existing.getDataValue("id")),
+                        merchantId
+                    );
+                }
+            }
+
+            console.error(
+                "PurchaseOrder CREATE ERROR:",
+                error
+            );
+
             throw error;
         }
     }
 
     // =============================================================================
-    // ⭐ NEW — ADD ITEM TO PURCHASE ORDER (ENTERPRISE SAFE)
+    // ADD ITEM TO PURCHASE ORDER
     // =============================================================================
-    /**
-     * WHY THIS WAS ADDED
-     * ---------------------------------------------------------------------------
-     * Your controller already calls addItemToPurchaseOrder().
-     * The method was missing → caused TS2339 compile error.
-     *
-     * WHAT THIS METHOD DOES
-     * ---------------------------------------------------------------------------
-     * ✅ validates purchase order exists
-     * ✅ inserts line item
-     * ✅ recalculates totalAmount (CRITICAL for finance)
-     * ✅ runs inside transaction
-     */
+    //
+    // WHAT CHANGED:
+    // merchantId is now required, and the PO is loaded using both its ID and
+    // merchantId. A merchant therefore cannot add an item to another merchant's PO.
+    // =============================================================================
     async addItemToPurchaseOrder(
         purchaseOrderId: number,
+        merchantId: number,
         item: any
-    ): Promise<any> {
-        const transaction = await this.sequelize.transaction();
+    ): Promise<any | null> {
+        this.validatePositiveId(
+            purchaseOrderId,
+            "purchase order ID"
+        );
+        this.validatePositiveId(merchantId, "merchantId");
+
+        const transaction: Transaction =
+            await this.sequelize.transaction();
 
         try {
-            // ---------------------------------------------------------------------
-            // Validate purchase order
-            // ---------------------------------------------------------------------
             const purchaseOrder =
-                await this.models.PurchaseOrder.findByPk(
-                    purchaseOrderId,
-                    { transaction }
-                );
+                await this.models.PurchaseOrder.findOne({
+                    where: {
+                        id: purchaseOrderId,
+                        merchantId,
+                    },
+                    transaction,
+                });
 
+            // Returning null lets the controller respond with 404 without
+            // exposing whether an order exists for another merchant.
             if (!purchaseOrder) {
-                throw new Error("Purchase order not found");
+                await transaction.rollback();
+                return null;
             }
 
-            // ---------------------------------------------------------------------
-            // Create new line item
-            // ---------------------------------------------------------------------
-            const quantity = Number(item.quantity) || 0;
-            const unitPrice = Number(item.unitPrice) || 0;
-            const lineTotal = quantity * unitPrice;
+            const currentStatus = String(
+                purchaseOrder.getDataValue("status") || ""
+            ).toLowerCase();
+
+            if (
+                currentStatus === "paid" ||
+                currentStatus === "completed"
+            ) {
+                throw new Error(
+                    "Items cannot be added to a paid or completed purchase order."
+                );
+            }
+
+            const normalizedItem = this.normalizeItem(item);
 
             await this.models.PurchaseOrderItem.create(
                 {
                     purchaseOrderId,
-                    itemName: item.itemName,
-                    quantity,
-                    unitPrice: String(unitPrice),
-                    lineTotal: String(lineTotal),
-                    description: item.description ?? null,
+                    itemName: normalizedItem.itemName,
+                    description: normalizedItem.description,
+                    quantity: normalizedItem.quantity,
+                    unitPrice: String(normalizedItem.unitPrice),
+                    lineTotal: String(normalizedItem.lineTotal),
                 },
                 { transaction }
             );
 
-            // ---------------------------------------------------------------------
-            // 🔥 CRITICAL: Recalculate order total
-            // ---------------------------------------------------------------------
             const items =
                 await this.models.PurchaseOrderItem.findAll({
                     where: { purchaseOrderId },
                     transaction,
                 });
 
-            const newTotal = items.reduce((sum: number, i: any) => {
-                return sum + Number(i.lineTotal || 0);
-            }, 0);
+            const newTotal = items.reduce(
+                (sum: number, existingItem: any) =>
+                    sum +
+                    Number(
+                        existingItem.getDataValue?.("lineTotal") ??
+                        existingItem.lineTotal ??
+                        0
+                    ),
+                0
+            );
 
             await purchaseOrder.update(
-                { totalAmount: String(newTotal) },
+                {
+                    totalAmount: String(newTotal),
+                },
                 { transaction }
             );
 
             await transaction.commit();
 
-            return this.getPurchaseOrderById(purchaseOrderId);
+            return await this.getPurchaseOrderById(
+                purchaseOrderId,
+                merchantId
+            );
         } catch (error) {
-            await transaction.rollback();
+            // Roll back only when the transaction has not already been finished.
+            if (!(transaction as any).finished) {
+                await transaction.rollback();
+            }
+
             console.error("ADD ITEM ERROR:", error);
             throw error;
         }
@@ -1094,11 +397,36 @@ export class PurchaseOrderService {
     // =============================================================================
     // GET PURCHASE ORDER BY ID
     // =============================================================================
-    async getPurchaseOrderById(id: number): Promise<any> {
-        return this.models.PurchaseOrder.findByPk(id, {
+    //
+    // CRITICAL SECURITY FIX:
+    // findByPk(id) was replaced by findOne({ where: { id, merchantId } }).
+    //
+    // WHY:
+    // An ID alone is not proof of ownership. Both values must match.
+    // =============================================================================
+    async getPurchaseOrderById(
+        id: number,
+        merchantId: number
+    ): Promise<any | null> {
+        this.validatePositiveId(id, "purchase order ID");
+        this.validatePositiveId(merchantId, "merchantId");
+
+        return this.models.PurchaseOrder.findOne({
+            where: {
+                id,
+                merchantId,
+            },
             include: [
-                { model: this.models.PurchaseOrderItem, as: "items" },
-                { model: this.models.Merchant, as: "merchant" },
+                {
+                    model:
+                        this.models.PurchaseOrderItem,
+                    as: "items",
+                },
+                {
+                    model:
+                        this.models.Merchant,
+                    as: "merchant",
+                },
             ],
         });
     }
@@ -1106,96 +434,483 @@ export class PurchaseOrderService {
     // =============================================================================
     // GET ALL PURCHASE ORDERS
     // =============================================================================
+    //
+    // SECURITY:
+    // The controller must pass { merchantId: authenticatedMerchant.id }.
+    // This method also refuses a missing/invalid merchantId so an accidental empty
+    // filter can never return every merchant's records.
+    // =============================================================================
     async getAllPurchaseOrders(
         filter: any = {},
         page: number = 1,
         limit: number = 10
-    ) {
-        const offset = (page - 1) * limit;
+    ): Promise<{
+        purchaseOrders: any[];
+        total: number;
+    }> {
+        const merchantId = Number(filter.merchantId);
+        this.validatePositiveId(merchantId, "merchantId");
 
-        const result = await this.models.PurchaseOrder.findAndCountAll({
-            where: filter,
-            include: [
-                { model: this.models.PurchaseOrderItem, as: "items" },
-                { model: this.models.Merchant, as: "merchant" },
-            ],
-            offset,
-            limit,
-            order: [["createdAt", "DESC"]],
-        });
+        const safePage =
+            Number.isFinite(page) && page > 0
+                ? Math.floor(page)
+                : 1;
+
+        const safeLimit =
+            Number.isFinite(limit) && limit > 0
+                ? Math.min(Math.floor(limit), 100)
+                : 10;
+
+        const offset =
+            (safePage - 1) * safeLimit;
+
+        // Force the authenticated merchantId into the final filter.
+        // Spreading filter first prevents any later property from overriding it.
+        const secureFilter = {
+            ...filter,
+            merchantId,
+        };
+
+        const result =
+            await this.models.PurchaseOrder.findAndCountAll({
+                where: secureFilter,
+                include: [
+                    {
+                        model:
+                            this.models.PurchaseOrderItem,
+                        as: "items",
+                    },
+                    {
+                        model:
+                            this.models.Merchant,
+                        as: "merchant",
+                    },
+                ],
+                distinct: true,
+                offset,
+                limit: safeLimit,
+                order: [["createdAt", "DESC"]],
+            });
 
         return {
             purchaseOrders: result.rows,
-            total: result.count,
+            total: Number(result.count),
         };
     }
 
     // =============================================================================
-    // UPDATE PURCHASE ORDER
+    // UPDATE EXISTING PURCHASE ORDER
     // =============================================================================
-    async updatePurchaseOrder(id: number, updateData: any) {
-        if (updateData.totalAmount !== undefined) {
-            updateData.totalAmount = String(updateData.totalAmount);
+    //
+    // WHAT CHANGED:
+    // - merchantId is required.
+    // - The existing PO is located with { id, merchantId }.
+    // - Ownership cannot be changed through updateData.
+    // - Status cannot be changed here; use updatePurchaseOrderStatus().
+    // - Items are replaced transactionally when an items array is supplied.
+    //
+    // WHY:
+    // This preserves Continue Order while preventing cross-merchant updates.
+    // =============================================================================
+    async updatePurchaseOrder(
+        id: number,
+        merchantId: number,
+        updateData: any
+    ): Promise<any | null> {
+        this.validatePositiveId(id, "purchase order ID");
+        this.validatePositiveId(merchantId, "merchantId");
+
+        const transaction: Transaction =
+            await this.sequelize.transaction();
+
+        try {
+            const purchaseOrder =
+                await this.models.PurchaseOrder.findOne({
+                    where: {
+                        id,
+                        merchantId,
+                    },
+                    transaction,
+                });
+
+            if (!purchaseOrder) {
+                await transaction.rollback();
+                return null;
+            }
+
+            const currentStatus = String(
+                purchaseOrder.getDataValue("status") || ""
+            ).toLowerCase();
+
+            if (
+                currentStatus === "paid" ||
+                currentStatus === "completed"
+            ) {
+                throw new Error(
+                    "A paid or completed purchase order cannot be edited."
+                );
+            }
+
+            if (currentStatus === "cancelled") {
+                throw new Error(
+                    "A cancelled purchase order cannot be edited. Create a new order instead."
+                );
+            }
+
+            const hasItemsUpdate =
+                Array.isArray(updateData?.items);
+
+            const normalizedItems = hasItemsUpdate
+                ? updateData.items.map(
+                    (item: any, index: number) =>
+                        this.normalizeItem(item, index)
+                )
+                : [];
+
+            if (
+                hasItemsUpdate &&
+                normalizedItems.length === 0
+            ) {
+                throw new Error(
+                    "A purchase order must contain at least one item."
+                );
+            }
+
+            const headerUpdate: Record<string, any> = {};
+
+            if (updateData?.description !== undefined) {
+                headerUpdate.description =
+                    updateData.description || null;
+            }
+
+            if (updateData?.dueDate !== undefined) {
+                headerUpdate.dueDate =
+                    updateData.dueDate || null;
+            }
+
+            if (updateData?.customerName !== undefined) {
+                headerUpdate.customerName =
+                    String(updateData.customerName || '').trim() || null;
+            }
+
+            if (updateData?.customerEmail !== undefined) {
+                headerUpdate.customerEmail =
+                    String(updateData.customerEmail || '').trim() || null;
+            }
+
+            if (updateData?.customerPhone !== undefined) {
+                headerUpdate.customerPhone =
+                    String(updateData.customerPhone || '').trim() || null;
+            }
+
+            // poReference may be edited only when supplied.
+            // merchantId and status are intentionally excluded.
+            if (updateData?.poReference !== undefined) {
+                const poReference = String(
+                    updateData.poReference || ""
+                ).trim();
+
+                if (!poReference) {
+                    throw new Error(
+                        "Purchase order reference cannot be empty."
+                    );
+                }
+
+                headerUpdate.poReference = poReference;
+            }
+
+            if (hasItemsUpdate) {
+                const totalAmount =
+                    normalizedItems.reduce(
+                        (sum: number, item: any) =>
+                            sum + item.lineTotal,
+                        0
+                    );
+
+                headerUpdate.totalAmount =
+                    String(totalAmount);
+            }
+
+            if (Object.keys(headerUpdate).length > 0) {
+                await purchaseOrder.update(
+                    headerUpdate,
+                    { transaction }
+                );
+            }
+
+            if (hasItemsUpdate) {
+                await this.models.PurchaseOrderItem.destroy({
+                    where: {
+                        purchaseOrderId: id,
+                    },
+                    transaction,
+                });
+
+                for (const item of normalizedItems) {
+                    await this.models.PurchaseOrderItem.create(
+                        {
+                            purchaseOrderId: id,
+                            itemName: item.itemName,
+                            description: item.description,
+                            quantity: item.quantity,
+                            unitPrice: String(item.unitPrice),
+                            lineTotal: String(item.lineTotal),
+                        },
+                        { transaction }
+                    );
+                }
+            }
+
+            await transaction.commit();
+
+            return await this.getPurchaseOrderById(
+                id,
+                merchantId
+            );
+        } catch (error) {
+            if (!(transaction as any).finished) {
+                await transaction.rollback();
+            }
+
+            console.error(
+                "PurchaseOrder UPDATE ERROR:",
+                error
+            );
+
+            throw error;
         }
-
-        await this.models.PurchaseOrder.update(updateData, {
-            where: { id },
-        });
-
-        return this.getPurchaseOrderById(id);
     }
 
     // =============================================================================
     // DELETE PURCHASE ORDER
     // =============================================================================
-    async deletePurchaseOrder(id: number): Promise<boolean> {
-        await this.models.PurchaseOrderItem.destroy({
-            where: { purchaseOrderId: id },
-        });
+    //
+    // CRITICAL SECURITY FIX:
+    // The parent PO is checked with { id, merchantId } before any child items are
+    // deleted. This prevents a merchant from deleting another merchant's line items
+    // by supplying a foreign purchaseOrderId.
+    // =============================================================================
+    async deletePurchaseOrder(
+        id: number,
+        merchantId: number
+    ): Promise<boolean> {
+        this.validatePositiveId(id, "purchase order ID");
+        this.validatePositiveId(merchantId, "merchantId");
 
-        await this.models.PurchaseOrder.destroy({
-            where: { id },
-        });
+        const transaction: Transaction =
+            await this.sequelize.transaction();
 
-        return true;
+        try {
+            const purchaseOrder =
+                await this.models.PurchaseOrder.findOne({
+                    where: {
+                        id,
+                        merchantId,
+                    },
+                    transaction,
+                });
+
+            if (!purchaseOrder) {
+                await transaction.rollback();
+                return false;
+            }
+
+            const currentStatus = String(
+                purchaseOrder.getDataValue("status") || ""
+            ).toLowerCase();
+
+            if (
+                currentStatus === "paid" ||
+                currentStatus === "completed"
+            ) {
+                throw new Error(
+                    "A paid or completed purchase order cannot be deleted."
+                );
+            }
+
+            await this.models.PurchaseOrderItem.destroy({
+                where: {
+                    purchaseOrderId: id,
+                },
+                transaction,
+            });
+
+            await purchaseOrder.destroy({ transaction });
+
+            await transaction.commit();
+            return true;
+        } catch (error) {
+            if (!(transaction as any).finished) {
+                await transaction.rollback();
+            }
+
+            console.error(
+                "PurchaseOrder DELETE ERROR:",
+                error
+            );
+
+            throw error;
+        }
     }
 
     // =============================================================================
-    // UPDATE STATUS
+    // UPDATE PURCHASE ORDER STATUS
     // =============================================================================
-    async updatePurchaseOrderStatus(id: number, status: string) {
-        await this.models.PurchaseOrder.update(
-            { status },
-            { where: { id } }
+    //
+    // CRITICAL SECURITY FIX:
+    // Both id and merchantId are required in the update WHERE clause.
+    //
+    // WHY:
+    // Previously, any authenticated account that knew an order ID could change it.
+    // =============================================================================
+    async updatePurchaseOrderStatus(
+        id: number,
+        merchantId: number,
+        status: string
+    ): Promise<any | null> {
+        this.validatePositiveId(id, "purchase order ID");
+        this.validatePositiveId(merchantId, "merchantId");
+
+        const normalizedStatus =
+            String(status || "").trim().toLowerCase();
+
+        // Per-order approval/rejection was retired. Keep legacy values readable
+        // for existing rows, but do not allow new transitions into them.
+        const allowedStatuses = ["pending", "cancelled"];
+
+        if (normalizedStatus === "approved" || normalizedStatus === "rejected") {
+            throw new Error(
+                "Per-order approval and rejection are no longer used. Create the order to generate its payment package immediately."
+            );
+        }
+
+        if (!allowedStatuses.includes(normalizedStatus)) {
+            throw new Error(
+                `Invalid status. Allowed values: ${allowedStatuses.join(", ")}.`
+            );
+        }
+
+        const purchaseOrder =
+            await this.models.PurchaseOrder.findOne({
+                where: {
+                    id,
+                    merchantId,
+                },
+            });
+
+        if (!purchaseOrder) {
+            return null;
+        }
+
+        const currentStatus = String(
+            purchaseOrder.getDataValue("status") || ""
+        ).toLowerCase();
+
+        if (
+            currentStatus === "paid" ||
+            currentStatus === "completed"
+        ) {
+            throw new Error(
+                "The status of a paid or completed purchase order cannot be changed."
+            );
+        }
+
+        if (
+            currentStatus === "cancelled" &&
+            normalizedStatus !== "cancelled"
+        ) {
+            throw new Error(
+                "A cancelled purchase order cannot be reopened. Create a new order instead."
+            );
+        }
+
+        await purchaseOrder.update({
+            status: normalizedStatus,
+        });
+
+        return this.getPurchaseOrderById(
+            id,
+            merchantId
         );
-
-        return this.getPurchaseOrderById(id);
     }
 
     // =============================================================================
-    // STATS
+    // GET PURCHASE ORDER STATS
     // =============================================================================
-    async getPurchaseOrderStats() {
+    //
+    // WHAT CHANGED:
+    // All count and sum queries are filtered by merchantId.
+    //
+    // WHY:
+    // Dashboard counts must match the authenticated merchant's list and must not
+    // reveal totals belonging to other businesses.
+    // =============================================================================
+    async getPurchaseOrderStats(
+        merchantId: number
+    ): Promise<{
+        totalOrders: number;
+        totalValue: number;
+        pending: number;
+        approved: number;
+        rejected: number;
+        completed: number;
+    }> {
+        this.validatePositiveId(merchantId, "merchantId");
+
         const { PurchaseOrder } = this.models;
 
-        const totalOrders = await PurchaseOrder.count();
-        const totalValue =
-            (await PurchaseOrder.sum("totalAmount")) || 0;
+        const [
+            totalOrders,
+            totalValueResult,
+            pending,
+            approved,
+            rejected,
+            completed,
+        ] = await Promise.all([
+            PurchaseOrder.count({
+                where: { merchantId },
+            }),
 
-        const pending = await PurchaseOrder.count({
-            where: { status: "pending" },
-        });
+            PurchaseOrder.sum("totalAmount", {
+                where: { merchantId },
+            }),
 
-        const completed = await PurchaseOrder.count({
-            where: { status: "completed" },
-        });
+            PurchaseOrder.count({
+                where: {
+                    merchantId,
+                    status: "pending",
+                },
+            }),
+
+            PurchaseOrder.count({
+                where: {
+                    merchantId,
+                    status: "approved",
+                },
+            }),
+
+            PurchaseOrder.count({
+                where: {
+                    merchantId,
+                    status: "rejected",
+                },
+            }),
+
+            PurchaseOrder.count({
+                where: {
+                    merchantId,
+                    status: "completed",
+                },
+            }),
+        ]);
 
         return {
-            totalOrders,
-            totalValue,
-            pending,
-            completed,
+            totalOrders: Number(totalOrders) || 0,
+            totalValue: Number(totalValueResult) || 0,
+            pending: Number(pending) || 0,
+            approved: Number(approved) || 0,
+            rejected: Number(rejected) || 0,
+            completed: Number(completed) || 0,
         };
     }
 }
-

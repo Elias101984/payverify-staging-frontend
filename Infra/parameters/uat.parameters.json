@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "uat"
+    },
+
+    "appServiceName": {
+      "value": "payverify-uat-api"
+    },
+
+    "postgresServerName": {
+      "value": "payverify-uat-postgres"
+    },
+
+    "keyVaultName": {
+      "value": "payverify-uat-kv-001"
+    },
+
+    "postgresAdminPassword": {
+      "value": "YourStrongPassword123!"
+    }
+  }
+}

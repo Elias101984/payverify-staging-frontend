@@ -13,14 +13,8 @@ param postgresServerName string
 @description('Key Vault Name')
 param keyVaultName string
 
-@description('Storage Account Name')
-param storageAccountName string
-
-@description('Administrator Login')
-param postgresAdminLogin string
-
 @secure()
-@description('Administrator Password')
+@description('PostgreSQL Admin Password')
 param postgresAdminPassword string
 
 /*
@@ -32,9 +26,15 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: '${environmentName}-plan'
   location: location
 
+  /*
+  |--------------------------------------------------------------------------
+  | Use FREE tier initially because new Azure subscriptions
+  | commonly have zero VM quota.
+  |--------------------------------------------------------------------------
+  */
   sku: {
-    name: 'B1'
-    tier: 'Basic'
+    name: 'F1'
+    tier: 'Free'
   }
 
   kind: 'linux'
@@ -46,10 +46,10 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
 
 /*
 |--------------------------------------------------------------------------
-| App Service
+| Backend API App Service
 |--------------------------------------------------------------------------
 */
-resource webApp 'Microsoft.Web/sites@2023-01-01' = {
+resource backendApi 'Microsoft.Web/sites@2023-01-01' = {
   name: appServiceName
   location: location
 
@@ -58,18 +58,11 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   properties: {
     serverFarmId: appServicePlan.id
 
+    httpsOnly: true
+
     siteConfig: {
       linuxFxVersion: 'NODE|20-lts'
-
-      appSettings: [
-        {
-          name: 'WEBSITES_PORT'
-          value: '3000'
-        }
-      ]
     }
-
-    httpsOnly: true
   }
 }
 
@@ -88,10 +81,16 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview'
   }
 
   properties: {
-    administratorLogin: postgresAdminLogin
+    administratorLogin: 'payverifyadmin'
+
+    /*
+    |--------------------------------------------------------------------------
+    | Secure parameterized password
+    |--------------------------------------------------------------------------
+    */
     administratorLoginPassword: postgresAdminPassword
 
-    version: '16'
+    version: '15'
 
     storage: {
       storageSizeGB: 32
@@ -99,41 +98,14 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview'
 
     backup: {
       backupRetentionDays: 7
-    }
-
-    highAvailability: {
-      mode: 'Disabled'
-    }
-
-    network: {
-      publicNetworkAccess: 'Enabled'
+      geoRedundantBackup: 'Disabled'
     }
   }
 }
 
 /*
 |--------------------------------------------------------------------------
-| Storage Account
-|--------------------------------------------------------------------------
-*/
-resource storage 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: storageAccountName
-  location: location
-
-  sku: {
-    name: 'Standard_LRS'
-  }
-
-  kind: 'StorageV2'
-
-  properties: {
-    accessTier: 'Hot'
-  }
-}
-
-/*
-|--------------------------------------------------------------------------
-| Key Vault
+| Azure Key Vault
 |--------------------------------------------------------------------------
 */
 resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {

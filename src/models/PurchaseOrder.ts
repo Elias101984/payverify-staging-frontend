@@ -21,7 +21,9 @@ interface PurchaseOrderAttributes {
     id: number;
     poReference: string;
     merchantId: number;
+    customerName?: string;
     customerEmail?: string;
+    customerPhone?: string;
     status: string;
     totalAmount: string; // DECIMAL stored as string in Sequelize
     description?: string;
@@ -43,7 +45,9 @@ class PurchaseOrder
     public id!: number;
     public poReference!: string;
     public merchantId!: number;
+    public customerName?: string;
     public customerEmail?: string;
+    public customerPhone?: string;
     public status!: string;
 
     /**
@@ -80,9 +84,21 @@ PurchaseOrder.init(
             allowNull: false,
         },
 
+        customerName: {
+            type: DataTypes.STRING(255),
+            field: 'customer_name',
+            allowNull: true,
+        },
+
         customerEmail: {
             type: DataTypes.STRING(255),
             field: 'customer_email',
+            allowNull: true
+        },
+
+        customerPhone: {
+            type: DataTypes.STRING(40),
+            field: 'customer_phone',
             allowNull: true
         },
 

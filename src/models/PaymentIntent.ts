@@ -585,6 +585,16 @@ export interface PaymentIntentAttributes {
     payment_link?: string | null;
     qr_url?: string | null;
 
+    gateway_reference?: string | null;
+    gateway_authorization_url?: string | null;
+    gateway_access_code?: string | null;
+    payment_started_at?: Date | null;
+    settlement_status?: string | null;
+    paystack_settlement_id?: number | null;
+    settlement_amount_kobo?: number | null;
+    settlement_date?: Date | null;
+    settlement_checked_at?: Date | null;
+
     status: 'pending' | 'paid' | 'expired';
 
     expires_at?: Date | null;
@@ -615,6 +625,15 @@ interface PaymentIntentCreationAttributes
         | 'customer_name'
         | 'payment_link'
         | 'qr_url'
+        | 'gateway_reference'
+        | 'gateway_authorization_url'
+        | 'gateway_access_code'
+        | 'payment_started_at'
+        | 'settlement_status'
+        | 'paystack_settlement_id'
+        | 'settlement_amount_kobo'
+        | 'settlement_date'
+        | 'settlement_checked_at'
         | 'expires_at'
     > { }
 
@@ -639,6 +658,16 @@ export class PaymentIntent
 
     public payment_link!: string | null;
     public qr_url!: string | null;
+
+    public gateway_reference!: string | null;
+    public gateway_authorization_url!: string | null;
+    public gateway_access_code!: string | null;
+    public payment_started_at!: Date | null;
+    public settlement_status!: string | null;
+    public paystack_settlement_id!: number | null;
+    public settlement_amount_kobo!: number | null;
+    public settlement_date!: Date | null;
+    public settlement_checked_at!: Date | null;
 
     public status!: 'pending' | 'paid' | 'expired';
 
@@ -696,6 +725,33 @@ PaymentIntent.init({
         type: DataTypes.TEXT,
         allowNull: true
     },
+
+    gateway_reference: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        unique: true
+    },
+
+    gateway_authorization_url: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+
+    gateway_access_code: {
+        type: DataTypes.STRING(180),
+        allowNull: true
+    },
+
+    payment_started_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+
+    settlement_status: { type: DataTypes.STRING(30), allowNull: true },
+    paystack_settlement_id: { type: DataTypes.BIGINT, allowNull: true },
+    settlement_amount_kobo: { type: DataTypes.INTEGER, allowNull: true },
+    settlement_date: { type: DataTypes.DATE, allowNull: true },
+    settlement_checked_at: { type: DataTypes.DATE, allowNull: true },
 
     status: {
         type: DataTypes.STRING(20),

@@ -7,7 +7,10 @@ import { UserJwtPayload } from '../types/express';
 
 // ✅ NEW: SendGrid email integration
 import sgMail from '@sendgrid/mail';
-sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+const sendGridApiKey = process.env.SENDGRID_API_KEY?.trim();
+if (sendGridApiKey?.startsWith('SG.')) {
+    sgMail.setApiKey(sendGridApiKey);
+}
 
 /**
  * POST /qr/generate
@@ -129,21 +132,55 @@ export const validateQRCode = async (req: Request, res: Response): Promise<void>
  * GET /qr/download/:merchantId
  * ------------------------------------------------------------------------------
  * Redirects the client to the QR image hosted on Cloudinary.
+ *
+ * TYPESCRIPT / RENDER BUILD FIX:
+ * - Express may type req.params.merchantId as string | string[].
+ * - parseInt() only accepts a string.
+ * - We normalize the route parameter to a single string before parsing it.
+ * - We also validate the parsed ID before querying the database.
+ *
+ * This fixes:
+ * TS2345: Argument of type 'string | string[]'
+ * is not assignable to parameter of type 'string'.
  */
-export const downloadQRCode = async (req: Request, res: Response): Promise<void> => {
+export const downloadQRCode = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
     try {
-        const merchantId = parseInt(req.params.merchantId, 10);
+        // Normalize merchantId from string | string[] to a single string.
+        const merchantIdParam = Array.isArray(req.params.merchantId)
+            ? req.params.merchantId[0]
+            : req.params.merchantId;
+
+        // Convert the normalized route parameter to a numeric merchant ID.
+        const merchantId = parseInt(merchantIdParam, 10);
+
+        // Reject an invalid merchant ID before querying the database.
+        if (Number.isNaN(merchantId)) {
+            res.status(400).json({
+                message: 'Invalid merchant ID',
+            });
+            return;
+        }
+
         const merchant = await Merchant.findByPk(merchantId);
 
         if (!merchant || !merchant.qrUrl) {
-            res.status(404).json({ message: 'QR not found' });
+            res.status(404).json({
+                message: 'QR not found',
+            });
             return;
         }
 
         res.redirect(merchant.qrUrl);
+
     } catch (err) {
         console.error('QR download failed', err);
-        res.status(500).json({ message: 'QR download failed' });
+
+        res.status(500).json({
+            message: 'QR download failed',
+        });
     }
 };
 

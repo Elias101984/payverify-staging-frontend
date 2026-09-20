@@ -1138,52 +1138,52 @@ export default function PaymentPage() {
         }
     };
 
-    /**
-    =============================================================================
-    Simulate Payment (FIXED)
-    =============================================================================
-    */
-    const simulatePay = async () => {
+    ///**
+    //=============================================================================
+    //Simulate Payment (FIXED)
+    //=============================================================================
+    //*/
+    //const simulatePay = async () => {
 
-        if (!intent?.id) {
-            toast.error("Missing PaymentIntent id");
-            return;
-        }
+    //    if (!intent?.id) {
+    //        toast.error("Missing PaymentIntent id");
+    //        return;
+    //    }
 
-        // ✅ DEBUG — helps trace issues quickly
-        console.log("simulatePay sending id:", intent.id);
+    //    // ✅ DEBUG — helps trace issues quickly
+    //    console.log("simulatePay sending id:", intent.id);
 
-        try {
+    //    try {
 
-            const res =
-                await api.post(
-                    `/payment-intents/${intent.id}/mark-paid`
-                );
+    //        const res =
+    //            await api.post(
+    //                `/payment-intents/${intent.id}/mark-paid`
+    //            );
 
-            if (!res.data?.success) {
-                toast.error(
-                    res.data?.message ||
-                    "Failed to mark paid"
-                );
-                return;
-            }
+    //        if (!res.data?.success) {
+    //            toast.error(
+    //                res.data?.message ||
+    //                "Failed to mark paid"
+    //            );
+    //            return;
+    //        }
 
-            toast.success(
-                "Payment completed successfully"
-            );
+    //        toast.success(
+    //            "Payment completed successfully"
+    //        );
 
-            setIntent(res.data.data);
+    //        setIntent(res.data.data);
 
-        } catch (err: any) {
+    //    } catch (err: any) {
 
-            console.error(err);
+    //        console.error(err);
 
-            toast.error(
-                err.response?.data?.message ||
-                "Failed to complete payment"
-            );
-        }
-    };
+    //        toast.error(
+    //            err.response?.data?.message ||
+    //            "Failed to complete payment"
+    //        );
+    //    }
+    //};
 
     /**
     =============================================================================
@@ -1264,13 +1264,13 @@ export default function PaymentPage() {
                         Download Invoice
                     </Button>
 
-                    <Button
-                        variant="success"
-                        disabled={isPaid || isExpired}
-                        onClick={simulatePay}
-                    >
-                        {isPaid ? "Paid" : "Pay Now (Simulate)"}
-                    </Button>
+                    {/*<Button*/}
+                    {/*    variant="success"*/}
+                    {/*    disabled={isPaid || isExpired}*/}
+                    {/*    onClick={simulatePay}*/}
+                    {/*>*/}
+                    {/*    {isPaid ? "Paid" : "Pay Now (Simulate)"}*/}
+                    {/*</Button>*/}
 
                 </div>
 

@@ -63,16 +63,30 @@ function asFirstRow<T = any>(rows: unknown): T {
 
 export async function getTransactionsSummary(req: Request, res: Response) {
     try {
-        const interval = String(req.query.interval || 'day').toLowerCase(); // day|week|month
-        const dateFrom = req.query.dateFrom ? new Date(String(req.query.dateFrom)) : new Date(Date.now() - 30 * 864e5);
-        const dateTo = req.query.dateTo ? new Date(String(req.query.dateTo)) : new Date();
+        const interval = String(req.query.interval || 'day').toLowerCase(); // day|week|month|year
+        if (!['day', 'week', 'month', 'year'].includes(interval)) {
+            return res.status(400).json({ message: 'interval must be day, week, month, or year' });
+        }
+        const defaultWindowDays = interval === 'day' ? 30 : interval === 'week' ? 84 : interval === 'month' ? 365 : 1825;
+        const dateFrom = req.query.dateFrom ? new Date(`${String(req.query.dateFrom)}T00:00:00`) : new Date(Date.now() - defaultWindowDays * 864e5);
+        // Date filters are inclusive from the user's perspective. Use the next
+        // midnight as the SQL upper bound so an end-date transaction is included.
+        const dateTo = req.query.dateTo
+            ? new Date(`${String(req.query.dateTo)}T00:00:00`)
+            : new Date();
+        if (req.query.dateTo) dateTo.setDate(dateTo.getDate() + 1);
+        if (Number.isNaN(dateFrom.getTime()) || Number.isNaN(dateTo.getTime()) || dateFrom >= dateTo) {
+            return res.status(400).json({ message: 'Invalid analytics date range' });
+        }
 
         const bucketExpr =
             interval === 'month'
                 ? `to_char(date_trunc('month', t."createdAt"), 'YYYY-MM')`
-                : interval === 'week'
-                    ? `to_char(date_trunc('week',  t."createdAt"), 'IYYY-IW')`
-                    : `to_char(date_trunc('day',   t."createdAt"), 'YYYY-MM-DD')`;
+                : interval === 'year'
+                    ? `to_char(date_trunc('year', t."createdAt"), 'YYYY')`
+                    : interval === 'week'
+                        ? `to_char(date_trunc('week',  t."createdAt"), 'IYYY-IW')`
+                        : `to_char(date_trunc('day',   t."createdAt"), 'YYYY-MM-DD')`;
 
         const { where, repl } = buildScope(req, 't');
 
@@ -98,8 +112,30 @@ export async function getTransactionsSummary(req: Request, res: Response) {
             totalAmount: asNum(r.total_amount),
         }));
 
+        const totals = (await sequelize.query(
+            `SELECT
+               COUNT(*)::int AS count,
+               COALESCE(SUM(t.amount), 0)::numeric AS total_amount,
+               COUNT(*) FILTER (WHERE t.status = 'completed')::int AS completed,
+               COUNT(*) FILTER (WHERE t.status = 'pending')::int AS pending,
+               COUNT(*) FILTER (WHERE t.status = 'failed')::int AS failed
+             FROM transactions t
+             JOIN merchants m ON m.id = t."merchantId"
+             ${where}
+               AND t."createdAt" >= :from AND t."createdAt" < :to`,
+            { type: QueryTypes.SELECT, replacements: { ...repl, from: dateFrom, to: dateTo } }
+        )) as Array<any>;
+        const total = asFirstRow(totals) || {};
+
         return res.json({
             series,
+            totals: {
+                count: asNum(total.count),
+                totalAmount: asNum(total.total_amount),
+                completed: asNum(total.completed),
+                pending: asNum(total.pending),
+                failed: asNum(total.failed),
+            },
             meta: {
                 interval,
                 dateFrom: dateFrom.toISOString(),

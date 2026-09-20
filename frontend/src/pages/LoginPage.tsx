@@ -5,7 +5,7 @@
 // What this does:
 // - Keeps the exact glossy look & feel (inline <StyleBlock/> so styles never go missing)
 // - Does NOT import or render <Navbar />, so the top nav is hidden on login
-// - Preserves your original UX: forgot password link, bank login, create account,
+// - Preserves your original UX: forgot password link and password visibility toggle,
 //   password visibility toggle, and a placeholder for your Turnstile captcha
 // -----------------------------------------------------------------------------
 
@@ -13,7 +13,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEnvelope, faLock, faLandmark, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
+import { faEnvelope, faLock, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 
 const LoginPage: React.FC = () => {
     const { login } = useAuth();
@@ -32,7 +32,9 @@ const LoginPage: React.FC = () => {
         setError(null);
         try {
             setSubmitting(true);
-            await login(email, password);
+            // The current auth context accepts the captcha field; the server
+            // still owns the actual verification policy.
+            await login(email, password, '');
             navigate(from, { replace: true });
         } catch (err: any) {
             console.error(err);
@@ -125,23 +127,6 @@ const LoginPage: React.FC = () => {
                                     <button type="submit" className="btn btn-primary fw-bold" disabled={submitting}>
                                         {submitting ? 'Signing in…' : 'Login'}
                                     </button>
-                                </div>
-
-                                {/* Bank Login */}
-                                <div className="col-12 text-center mt-2">
-                                    <small className="text-light-50 d-block mb-1">Are you a bank?</small>
-                                    <Link to="/bank-login" className="btn btn-outline-light btn-sm px-3">
-                                        <FontAwesomeIcon icon={faLandmark} className="me-2" />
-                                        Bank Login
-                                    </Link>
-                                </div>
-
-                                {/* Create Account */}
-                                <div className="col-12 text-center">
-                                    <small className="text-light-50 d-block mb-1">Don&apos;t have an account?</small>
-                                    <Link to="/register-user" className="btn btn-outline-primary btn-sm px-3">
-                                        Create Account
-                                    </Link>
                                 </div>
 
                                 {/* Bank Logos */}

@@ -16,19 +16,31 @@ REQUIREMENTS
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-### ---------- EDIT THESE 6 VALUES ----------
+### ---------- CONFIGURATION ----------
 # Local (source)
-$LocalHost     = "localhost"
-$LocalDb       = "payverifydb"
-$LocalUser     = "postgres"
-$LocalPassword = "payverify00"             # <-- your local postgres password
+$LocalHost     = $env:PAYVERIFY_LOCAL_DB_HOST
+$LocalDb       = $env:PAYVERIFY_LOCAL_DB_NAME
+$LocalUser     = $env:PAYVERIFY_LOCAL_DB_USER
+$LocalPassword = $env:PAYVERIFY_LOCAL_DB_PASSWORD
 
 # Azure (destination)
-$AzureHost     = "pg-payverify-dev.postgres.database.azure.com"
-$AzureDb       = "payverifydb"
-$AzureUser     = "pgadmindev"
-$AzurePassword = "Azurepayverify123$"   # <-- set this
-### ----------------------------------------
+$AzureHost     = $env:PAYVERIFY_AZURE_DB_HOST
+$AzureDb       = $env:PAYVERIFY_AZURE_DB_NAME
+$AzureUser     = $env:PAYVERIFY_AZURE_DB_USER
+$AzurePassword = $env:PAYVERIFY_AZURE_DB_PASSWORD
+
+$requiredConfig = @(
+  "PAYVERIFY_LOCAL_DB_HOST", "PAYVERIFY_LOCAL_DB_NAME",
+  "PAYVERIFY_LOCAL_DB_USER", "PAYVERIFY_LOCAL_DB_PASSWORD",
+  "PAYVERIFY_AZURE_DB_HOST", "PAYVERIFY_AZURE_DB_NAME",
+  "PAYVERIFY_AZURE_DB_USER", "PAYVERIFY_AZURE_DB_PASSWORD"
+)
+foreach ($name in $requiredConfig) {
+  if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+    throw "Missing required environment variable: $name"
+  }
+}
+### -----------------------------------
 
 # Tables to verify (add/remove if needed)
 $VerifyTables = @("merchants","users","transactions")

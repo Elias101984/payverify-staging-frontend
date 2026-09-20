@@ -21,7 +21,7 @@ function parsePositiveInt(val: unknown, fallback: number): number {
  * Query params (optional):
  *  - limit: number (default 20)
  *  - offset: number (default 0)
- *  - q: string (search in businessName, case-insensitive)
+ *  - q: string (search in merchant name, case-insensitive)
  *
  * Auth:
  *  - Requires bearer JWT; verifyJwtMiddleware must attach req.user.id
@@ -42,13 +42,13 @@ router.get(
 
             const where: any = { userId };
             if (q && q.length > 0) {
-                where.businessName = { [Op.iLike]: `%${q}%` };
+                where.name = { [Op.iLike]: `%${q}%` };
             }
 
             const { rows, count } = await Merchant.findAndCountAll({
                 where,
-                attributes: ['id', 'businessName'],
-                order: [['businessName', 'ASC']],
+                attributes: ['id', 'name'],
+                order: [['name', 'ASC']],
                 limit,
                 offset,
             });

@@ -1,7 +1,12 @@
 import jwt, { SignOptions, JwtPayload } from 'jsonwebtoken';
 
-// Replace with your actual environment variable or fallback
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key';
+const getJwtSecret = (): string => {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        throw new Error('JWT_SECRET is not configured');
+    }
+    return secret;
+};
 
 /**
  * Interface for JWT payload structure.
@@ -23,7 +28,7 @@ export const signToken = (
     payload: TokenPayload,
     expiresIn: SignOptions['expiresIn'] = '1h'
 ): string => {
-    return jwt.sign(payload, JWT_SECRET, { expiresIn });
+    return jwt.sign(payload, getJwtSecret(), { expiresIn });
 };
 
 /**
@@ -33,5 +38,5 @@ export const signToken = (
  * @returns The decoded token payload
  */
 export const verifyToken = (token: string): TokenPayload => {
-    return jwt.verify(token, JWT_SECRET) as TokenPayload;
+    return jwt.verify(token, getJwtSecret()) as TokenPayload;
 };

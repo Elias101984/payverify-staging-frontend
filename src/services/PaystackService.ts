@@ -28,6 +28,9 @@ export interface InitializeTransactionPayload {
     reference: string;
     callback_url?: string;
     metadata?: any;
+    subaccount?: string;
+    transaction_charge?: number;
+    bearer?: "account" | "subaccount";
 }
 
 // =============================================================================
@@ -50,11 +53,17 @@ export interface PaystackInitializeResponse {
 export interface PaystackVerifyResponse {
     status: boolean;
     message: string;
+
     data: {
+        id?: number;
         reference: string;
-        status: string; // "success" | "failed" etc.
+        status: string;
         amount: number;
         currency: string;
+        paid_at?: string | null;
+        channel?: string;
+        gateway_response?: string;
+        metadata?: Record<string, unknown>;
     };
 }
 
@@ -107,7 +116,17 @@ export class PaystackService {
                 amount: Math.round(payload.amountNaira * 100), // convert to kobo
                 reference: payload.reference,
                 callback_url: payload.callback_url,
-                metadata: payload.metadata
+                metadata: payload.metadata,
+                ...(payload.subaccount
+                    ? { subaccount: payload.subaccount }
+                    : {}),
+                ...(Number.isInteger(payload.transaction_charge) &&
+                Number(payload.transaction_charge) >= 0
+                    ? { transaction_charge: payload.transaction_charge }
+                    : {}),
+                ...(payload.bearer
+                    ? { bearer: payload.bearer }
+                    : {})
             },
             { headers: this.headers }
         );
@@ -211,4 +230,43 @@ export class PaystackService {
         const res = await this.verifyTransaction(reference);
         return res?.data?.status === "success";
     }
+
+    async createSubaccount(payload: {
+        business_name: string;
+        settlement_bank: string;
+        account_number: string;
+        percentage_charge?: number;
+        primary_contact_email?: string;
+        primary_contact_phone?: string;
+    }): Promise<PaystackSubaccountResponse> {
+        if (!this.secretKey) throw new Error("PAYSTACK_SECRET_KEY is missing in environment");
+        const res = await axios.post(
+            `${this.baseUrl}/subaccount`,
+            { ...payload, percentage_charge: payload.percentage_charge ?? 0 },
+            { headers: this.headers }
+        );
+        return res.data as PaystackSubaccountResponse;
+    }
+
+    async listSettlements(subaccountId: number): Promise<any> {
+        const res = await axios.get(`${this.baseUrl}/settlement`, {
+            headers: this.headers,
+            params: { subaccount: subaccountId, perPage: 50 },
+        });
+        return res.data;
+    }
+
+    async listSettlementTransactions(settlementId: number): Promise<any> {
+        const res = await axios.get(
+            `${this.baseUrl}/settlement/${settlementId}/transactions`,
+            { headers: this.headers, params: { perPage: 100 } }
+        );
+        return res.data;
+    }
+}
+
+export interface PaystackSubaccountResponse {
+    status: boolean;
+    message: string;
+    data: { id: number; subaccount_code: string; business_name: string };
 }

@@ -1,7 +1,19 @@
-﻿// src/contexts/AuthContext.tsx
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+﻿// frontend/src/contexts/AuthContext.tsx
+
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useState,
+} from 'react';
+
 import { jwtDecode } from 'jwt-decode';
-import { loginUser, registerUser } from '../services/api';
+
+import {
+    loginUser,
+    registerUser,
+} from '../services/api';
 
 interface DecodedToken {
     id: number;
@@ -22,156 +34,464 @@ interface RegisterData {
     name: string;
     email: string;
     password: string;
+
     cac_number: string;
     tin_number?: string;
     bvn?: string;
+
     account_number: string;
     bank_name: string;
+
     qr_code?: string;
-    role?: string;
+
+    captchaToken: string;
 }
 
 interface Merchant {
     id: number;
     name: string;
     userId: number;
+
     account_number: string;
     bank_name: string;
+
     qr_code?: string;
+
     createdAt: string;
 }
 
 interface AuthContextProps {
     user: User | null;
+
     token: string | null;
+
     isAuthenticated: boolean;
-    login: (email: string, password: string) => Promise<void>;
-    logout: () => void; // ⬅️ unchanged API used by Navbar
-    register: (data: RegisterData) => Promise<{ merchant: Merchant }>;
-    setSession: (token: string, user: User) => void;
+
+    login: (
+        email: string,
+        password: string,
+        captchaToken: string
+    ) => Promise<void>;
+
+    logout: () => void;
+
+    register: (
+        data: RegisterData
+    ) => Promise<{
+        merchant: Merchant;
+    }>;
+
+    setSession: (
+        token: string,
+        user: User
+    ) => void;
 }
 
 interface AuthProviderProps {
     children: React.ReactNode;
 }
 
-const AuthContext = createContext<AuthContextProps | undefined>(undefined);
+const AuthContext =
+    createContext<
+        AuthContextProps | undefined
+    >(undefined);
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(null);
+export const AuthProvider:
+    React.FC<AuthProviderProps> = ({
+        children,
+    }) => {
+        const [
+            user,
+            setUser,
+        ] =
+            useState<User | null>(
+                null
+            );
 
-    /** 
-     * 🔒 Private helper: wipe session WITHOUT redirect.
-     * Used for internal flows (e.g., boot-time token expiry) so we don't force navigation.
-     */
-    const clearSession = useCallback(() => {
-        setToken(null);
-        setUser(null);
-        try {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-        } catch { }
-    }, []);
+        const [
+            token,
+            setToken,
+        ] =
+            useState<
+                string | null
+            >(null);
 
-    useEffect(() => {
-        const storedToken = localStorage.getItem('token');
-        const storedUser = localStorage.getItem('user');
+        // ---------------------------------------------------------------------
+        // Clear session
+        // ---------------------------------------------------------------------
 
-        if (storedToken && storedUser) {
-            try {
-                const payload: DecodedToken = jwtDecode(storedToken);
-                if (payload.exp && Date.now() >= payload.exp * 1000) {
-                    // ⛔ Was: logout() — which would redirect.
-                    // ✅ Now: just clear session so app can render public routes (e.g., Landing) without a forced redirect.
-                    clearSession();
-                } else {
-                    setToken(storedToken);
-                    setUser(JSON.parse(storedUser) as User);
+        const clearSession =
+            useCallback(() => {
+                setToken(null);
+                setUser(null);
+
+                try {
+                    localStorage.removeItem(
+                        'token'
+                    );
+
+                    localStorage.removeItem(
+                        'user'
+                    );
+                } catch {
+                    // Ignore unavailable storage.
                 }
-            } catch (err) {
-                console.error('Failed to decode token', err);
-                clearSession();
-            }
-        }
-    }, [clearSession]);
+            }, []);
 
-    const setSession = (newToken: string, newUser: User) => {
-        try {
-            const payload: DecodedToken = jwtDecode(newToken);
-            if (payload.exp && Date.now() >= payload.exp * 1000) {
+        // ---------------------------------------------------------------------
+        // Restore session
+        // ---------------------------------------------------------------------
+
+        useEffect(() => {
+            let storedToken:
+                string | null = null;
+
+            let storedUser:
+                string | null = null;
+
+            try {
+                storedToken =
+                    localStorage.getItem(
+                        'token'
+                    );
+
+                storedUser =
+                    localStorage.getItem(
+                        'user'
+                    );
+            } catch {
                 clearSession();
                 return;
             }
-        } catch (e) {
-            console.error('Invalid token passed to setSession', e);
+
+            if (
+                !storedToken ||
+                !storedUser
+            ) {
+                return;
+            }
+
+            try {
+                const payload =
+                    jwtDecode<
+                        DecodedToken
+                    >(
+                        storedToken
+                    );
+
+                if (
+                    payload.exp &&
+                    Date.now() >=
+                    payload.exp *
+                    1000
+                ) {
+                    clearSession();
+                    return;
+                }
+
+                const parsedUser =
+                    JSON.parse(
+                        storedUser
+                    ) as User;
+
+                setToken(
+                    storedToken
+                );
+
+                setUser(
+                    parsedUser
+                );
+            } catch (error) {
+                console.error(
+                    '[Auth] Failed to restore session',
+                    error
+                );
+
+                clearSession();
+            }
+        }, [clearSession]);
+
+        // ---------------------------------------------------------------------
+        // Save session
+        // ---------------------------------------------------------------------
+
+        const setSession = (
+            newToken: string,
+            newUser: User
+        ) => {
+            try {
+                const payload =
+                    jwtDecode<
+                        DecodedToken
+                    >(
+                        newToken
+                    );
+
+                if (
+                    payload.exp &&
+                    Date.now() >=
+                    payload.exp *
+                    1000
+                ) {
+                    clearSession();
+                    return;
+                }
+            } catch (error) {
+                console.error(
+                    '[Auth] Invalid token',
+                    error
+                );
+
+                clearSession();
+                return;
+            }
+
+            setToken(
+                newToken
+            );
+
+            setUser(
+                newUser
+            );
+
+            try {
+                localStorage.setItem(
+                    'token',
+                    newToken
+                );
+
+                localStorage.setItem(
+                    'user',
+                    JSON.stringify(
+                        newUser
+                    )
+                );
+            } catch (error) {
+                console.error(
+                    '[Auth] Failed to persist session',
+                    error
+                );
+
+                clearSession();
+            }
+        };
+
+        // ---------------------------------------------------------------------
+        // LOGIN
+        // ---------------------------------------------------------------------
+
+        const login = async (
+            email: string,
+            password: string,
+            captchaToken: string
+        ): Promise<void> => {
+            const normalizedEmail =
+                email
+                    .trim()
+                    .toLowerCase();
+
+            const response =
+                await loginUser({
+                    email:
+                        normalizedEmail,
+
+                    password,
+
+                    captchaToken,
+                });
+
+            const newToken =
+                response
+                    ?.data
+                    ?.token;
+
+            if (
+                !newToken ||
+                typeof newToken !==
+                'string'
+            ) {
+                throw new Error(
+                    'Authentication token was not returned by the server.'
+                );
+            }
+
+            const payload =
+                jwtDecode<
+                    DecodedToken
+                >(
+                    newToken
+                );
+
+            if (
+                !payload.id ||
+                !payload.email ||
+                !payload.role
+            ) {
+                throw new Error(
+                    'Authentication token contains invalid user information.'
+                );
+            }
+
+            const nextUser:
+                User = {
+                id:
+                    payload.id,
+
+                email:
+                    payload.email,
+
+                name:
+                    payload.name,
+
+                role:
+                    payload.role,
+            };
+
+            setSession(
+                newToken,
+                nextUser
+            );
+        };
+
+        // ---------------------------------------------------------------------
+        // REGISTER
+        // ---------------------------------------------------------------------
+
+        const register = async (
+            data: RegisterData
+        ): Promise<{
+            merchant: Merchant;
+        }> => {
+            const response =
+                await registerUser({
+                    ...data,
+
+                    email:
+                        data.email
+                            .trim()
+                            .toLowerCase(),
+                });
+
+            const newToken =
+                response
+                    ?.data
+                    ?.token;
+
+            const merchant =
+                response
+                    ?.data
+                    ?.merchant;
+
+            if (
+                !newToken ||
+                typeof newToken !==
+                'string'
+            ) {
+                throw new Error(
+                    'Authentication token was not returned by the server.'
+                );
+            }
+
+            if (!merchant) {
+                throw new Error(
+                    'Merchant information was not returned by the server.'
+                );
+            }
+
+            const payload =
+                jwtDecode<
+                    DecodedToken
+                >(
+                    newToken
+                );
+
+            if (
+                !payload.id ||
+                !payload.email ||
+                !payload.role
+            ) {
+                throw new Error(
+                    'Authentication token contains invalid user information.'
+                );
+            }
+
+            const nextUser:
+                User = {
+                id:
+                    payload.id,
+
+                email:
+                    payload.email,
+
+                name:
+                    payload.name,
+
+                role:
+                    payload.role,
+            };
+
+            setSession(
+                newToken,
+                nextUser
+            );
+
+            return {
+                merchant,
+            };
+        };
+
+        // ---------------------------------------------------------------------
+        // LOGOUT
+        // ---------------------------------------------------------------------
+
+        const logout = () => {
             clearSession();
-            return;
-        }
 
-        setToken(newToken);
-        setUser(newUser);
-        localStorage.setItem('token', newToken);
-        localStorage.setItem('user', JSON.stringify(newUser));
-    };
-
-    const login = async (email: string, password: string) => {
-        const res = await loginUser({ email, password });
-        const { token } = res.data;
-
-        const payload: DecodedToken = jwtDecode(token);
-        const nextUser: User = {
-            id: payload.id,
-            email: payload.email,
-            name: payload.name,
-            role: payload.role,
+            window.location.replace(
+                '/'
+            );
         };
 
-        setSession(token, nextUser);
-    };
+        const value:
+            AuthContextProps = {
+            user,
 
-    const register = async (data: RegisterData): Promise<{ merchant: Merchant }> => {
-        const res = await registerUser(data);
-        const { token, merchant } = res.data;
+            token,
 
-        const payload: DecodedToken = jwtDecode(token);
-        const nextUser: User = {
-            id: payload.id,
-            email: payload.email,
-            name: payload.name,
-            role: payload.role,
+            isAuthenticated:
+                Boolean(
+                    token
+                ),
+
+            login,
+
+            logout,
+
+            register,
+
+            setSession,
         };
 
-        setSession(token, nextUser);
-        return { merchant };
+        return (
+            <AuthContext.Provider
+                value={value}
+            >
+                {children}
+            </AuthContext.Provider>
+        );
     };
-
-    /**
-     * 🚪 Explicit logout: clear session and redirect to Landing page.
-     * - We use a hard redirect to guarantee no protected UI flashes and remove back-stack to the previous protected page.
-     */
-    const logout = () => {
-        clearSession();
-        window.location.replace('/'); // ⬅️ go to Landing page (default route)
-    };
-
-    const value: AuthContextProps = {
-        user,
-        token,
-        isAuthenticated: !!token,
-        login,
-        logout,     // Navbar keeps calling this — no component changes needed
-        register,
-        setSession,
-    };
-
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
 
 export const useAuth = () => {
-    const ctx = useContext(AuthContext);
-    if (!ctx) {
-        throw new Error('useAuth must be used within an AuthProvider');
+    const context =
+        useContext(
+            AuthContext
+        );
+
+    if (!context) {
+        throw new Error(
+            'useAuth must be used within an AuthProvider'
+        );
     }
-    return ctx;
+
+    return context;
 };

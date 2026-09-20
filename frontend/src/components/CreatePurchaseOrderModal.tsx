@@ -1,2084 +1,13 @@
-﻿////// src/components/CreatePurchaseOrderModal.tsx
-////// ----------------------------------------------------------------------------------
-////// FINAL PRODUCTION VERSION — PAYVERIFY COMPATIBLE
-//////
-////// Guarantees:
-//////
-////// ✔ merchantId always sent correctly
-////// ✔ totalAmount always numeric
-////// ✔ itemName correctly mapped
-////// ✔ prevents NOT NULL violations
-////// ✔ prevents invalid payloads
-////// ✔ backend Sequelize compatible
-////// ✔ fully typed and production safe
-////// ----------------------------------------------------------------------------------
-
-////import { useState, useEffect } from 'react';
-////import { Modal, Button, Form, Row, Col } from 'react-bootstrap';
-////import { useAuth } from '../contexts/AuthContext';
-////import api from '../services/api';
-////import { toast } from 'react-toastify';
-
-////interface Props {
-////    open: boolean;
-////    onClose: () => void;
-////    onCreateSuccess: () => void;
-////    isAdmin?: boolean;
-////}
-
-////interface ItemForm {
-////    name: string;
-////    description: string;
-////    quantity: string;
-////    unitPrice: string;
-////}
-
-////interface User {
-////    id: string;
-////    email: string;
-////    role: string;
-////    merchant?: {
-////        id: string;
-////        name: string;
-////    };
-////}
-
-////interface CreatePurchaseOrderPayload {
-
-////    merchantId: number;
-
-////    totalAmount: number;
-
-////    description: string;
-
-////    dueDate: string;
-
-////    items: {
-
-////        itemName: string;
-
-////        description: string | null;
-
-////        quantity: number;
-
-////        unitPrice: number;
-
-////    }[];
-////}
-
-////const CreatePurchaseOrderModal: React.FC<Props> = ({
-////    open,
-////    onClose,
-////    onCreateSuccess,
-////    isAdmin = false
-////}) => {
-
-////    const { token, user } = useAuth();
-
-////    const [loading, setLoading] = useState(false);
-
-////    const [formData, setFormData] = useState({
-
-////        merchantId: '',
-
-////        description: '',
-
-////        dueDate: '',
-
-////        items: [{
-////            name: '',
-////            description: '',
-////            quantity: '1',
-////            unitPrice: ''
-////        }] as ItemForm[]
-
-////    });
-
-////    // ----------------------------------------------------------------------------------
-////    // Initialize form safely
-////    // ----------------------------------------------------------------------------------
-
-////    //useEffect(() => {
-
-////    //    if (!open) return;
-
-////    //    const tomorrow = new Date();
-////    //    tomorrow.setDate(tomorrow.getDate() + 1);
-
-////    //    const dueDate =
-////    //        tomorrow.toISOString().split('T')[0];
-
-////    //    const userObj = user as User | null;
-
-////    //    const merchantId =
-////    //        userObj?.merchant?.id ?? '';
-
-////    //    setFormData({
-
-////    //        merchantId,
-
-////    //        description: '',
-
-////    //        dueDate,
-
-////    //        items: [{
-////    //            name: '',
-////    //            description: '',
-////    //            quantity: '1',
-////    //            unitPrice: ''
-////    //        }]
-////    //    });
-
-////    //}, [open, user]);
-
-
-
-////    // ----------------------------------------------------------------------------------
-////    // Calculate total safely
-////    // ----------------------------------------------------------------------------------
-
-////    const calculateTotal = (): number => {
-
-////        return formData.items.reduce(
-
-////            (sum, item) => {
-
-////                const qty =
-////                    Number(item.quantity) || 0;
-
-////                const price =
-////                    Number(item.unitPrice) || 0;
-
-////                return sum + (qty * price);
-
-////            },
-
-////            0
-////        );
-////    };
-
-////    const totalAmount =
-////        calculateTotal();
-
-////    // ----------------------------------------------------------------------------------
-////    // Submit
-////    // ----------------------------------------------------------------------------------
-
-////    const handleSubmit = async (
-////        e: React.FormEvent
-////    ) => {
-
-////        e.preventDefault();
-
-////        if (!token)
-////            return;
-
-////        if (!formData.merchantId && !isAdmin) {
-
-////            toast.error(
-////                "Merchant ID is required"
-////            );
-
-////            return;
-////        }
-
-////        if (totalAmount <= 0) {
-
-////            toast.error(
-////                "Total amount must be greater than zero"
-////            );
-
-////            return;
-////        }
-
-////        try {
-
-////            setLoading(true);
-
-////            const payload: CreatePurchaseOrderPayload = {
-
-////                merchantId:
-////                    Number(formData.merchantId),
-
-////                totalAmount:
-////                    Number(totalAmount),
-
-////                description:
-////                    formData.description,
-
-////                dueDate:
-////                    formData.dueDate,
-
-////                items:
-////                    formData.items.map(item => ({
-
-////                        itemName:
-////                            item.name,
-
-////                        description:
-////                            item.description || null,
-
-////                        quantity:
-////                            Number(item.quantity),
-
-////                        unitPrice:
-////                            Number(item.unitPrice)
-////                    }))
-////            };
-
-////            console.log(
-////                "Creating Purchase Order:",
-////                payload
-////            );
-
-////            await api.post(
-
-////                "/purchase-orders",
-
-////                payload,
-
-////                {
-////                    headers: {
-////                        Authorization:
-////                            `Bearer ${token}`
-////                    }
-////                }
-////            );
-
-////            toast.success(
-////                "Purchase Order created successfully"
-////            );
-
-////            onCreateSuccess();
-
-////            onClose();
-
-////        }
-////        catch (error: any) {
-
-////            console.error(
-////                "Create PO error:",
-////                error.response?.data || error
-////            );
-
-////            toast.error(
-////                error.response?.data?.message ||
-////                "Failed to create Purchase Order"
-////            );
-////        }
-////        finally {
-
-////            setLoading(false);
-////        }
-////    };
-
-////    // ----------------------------------------------------------------------------------
-////    // Item Handlers
-////    // ----------------------------------------------------------------------------------
-
-////    const handleItemChange =
-////        (index: number, field: keyof ItemForm, value: string) => {
-
-////            const items =
-////                [...formData.items];
-
-////            items[index] = {
-////                ...items[index],
-////                [field]: value
-////            };
-
-////            setFormData({
-////                ...formData,
-////                items
-////            });
-////        };
-
-////    const handleAddItem = () => {
-
-////        setFormData({
-
-////            ...formData,
-
-////            items: [
-
-////                ...formData.items,
-
-////                {
-////                    name: '',
-////                    description: '',
-////                    quantity: '1',
-////                    unitPrice: ''
-////                }
-////            ]
-////        });
-////    };
-
-////    const handleRemoveItem =
-////        (index: number) => {
-
-////            if (formData.items.length <= 1)
-////                return;
-
-////            setFormData({
-
-////                ...formData,
-
-////                items:
-////                    formData.items.filter(
-////                        (_, i) => i !== index
-////                    )
-////            });
-////        };
-
-////    // ----------------------------------------------------------------------------------
-////    // UI
-////    // ----------------------------------------------------------------------------------
-
-////    return (
-
-////        <Modal
-////            show={open}
-////            onHide={onClose}
-////            centered
-////            size="lg"
-////        >
-
-////            <Modal.Header closeButton>
-
-////                <Modal.Title>
-////                    Create Purchase Order
-////                </Modal.Title>
-
-////            </Modal.Header>
-
-////            <Modal.Body>
-
-////                <Form onSubmit={handleSubmit}>
-
-////                    <Form.Group>
-
-////                        <Form.Label>
-////                            Merchant ID
-////                        </Form.Label>
-
-////                        <Form.Control
-
-////                            value={formData.merchantId}
-
-////                            onChange={e =>
-////                                setFormData({
-////                                    ...formData,
-////                                    merchantId: e.target.value
-////                                })
-////                            }
-
-////                            disabled={!isAdmin}
-////                        />
-
-////                    </Form.Group>
-
-////                    <Form.Group className="mt-3">
-
-////                        <Form.Label>
-////                            Description
-////                        </Form.Label>
-
-////                        <Form.Control
-
-////                            value={formData.description}
-
-////                            onChange={e =>
-////                                setFormData({
-////                                    ...formData,
-////                                    description: e.target.value
-////                                })
-////                            }
-////                        />
-
-////                    </Form.Group>
-
-////                    <Form.Group className="mt-3">
-
-////                        <Form.Label>
-////                            Due Date
-////                        </Form.Label>
-
-////                        <Form.Control
-
-////                            type="date"
-
-////                            value={formData.dueDate}
-
-////                            onChange={e =>
-////                                setFormData({
-////                                    ...formData,
-////                                    dueDate: e.target.value
-////                                })
-////                            }
-////                        />
-
-////                    </Form.Group>
-
-////                    <hr />
-
-////                    {formData.items.map((item, index) => (
-
-////                        <Row key={index} className="mb-2">
-
-////                            <Col>
-
-////                                <Form.Control
-////                                    placeholder="Item Name"
-////                                    value={item.name}
-////                                    onChange={e =>
-////                                        handleItemChange(
-////                                            index,
-////                                            "name",
-////                                            e.target.value
-////                                        )
-////                                    }
-////                                />
-
-////                            </Col>
-
-////                            <Col>
-
-////                                <Form.Control
-////                                    placeholder="Quantity"
-////                                    value={item.quantity}
-////                                    onChange={e =>
-////                                        handleItemChange(
-////                                            index,
-////                                            "quantity",
-////                                            e.target.value
-////                                        )
-////                                    }
-////                                />
-
-////                            </Col>
-
-////                            <Col>
-
-////                                <Form.Control
-////                                    placeholder="Unit Price"
-////                                    value={item.unitPrice}
-////                                    onChange={e =>
-////                                        handleItemChange(
-////                                            index,
-////                                            "unitPrice",
-////                                            e.target.value
-////                                        )
-////                                    }
-////                                />
-
-////                            </Col>
-
-////                            <Col xs="auto">
-
-////                                <Button
-////                                    variant="danger"
-////                                    onClick={() =>
-////                                        handleRemoveItem(index)
-////                                    }
-////                                >
-////                                    X
-////                                </Button>
-
-////                            </Col>
-
-////                        </Row>
-////                    ))}
-
-////                    <Button
-////                        onClick={handleAddItem}
-////                        className="mt-2"
-////                    >
-////                        Add Item
-////                    </Button>
-
-////                    <hr />
-
-////                    <h5>
-////                        Total: ₦{totalAmount.toLocaleString()}
-////                    </h5>
-
-////                    <Button
-////                        type="submit"
-////                        disabled={loading}
-////                    >
-////                        {loading
-////                            ? "Creating..."
-////                            : "Create Purchase Order"}
-////                    </Button>
-
-////                </Form>
-
-////            </Modal.Body>
-
-////        </Modal>
-////    );
-////};
-
-////export default CreatePurchaseOrderModal;
-
-
-//// src/components/CreatePurchaseOrderModal.tsx
-//// ----------------------------------------------------------------------------------
-//// FINAL PRODUCTION VERSION — PAYVERIFY COMPATIBLE (FIXED)
-//// ----------------------------------------------------------------------------------
-
-//import { useState, useEffect, useRef } from 'react'; // FIXED: added useRef
-//import { Modal, Button, Form, Row, Col } from 'react-bootstrap';
-//import { useAuth } from '../contexts/AuthContext';
-//import api from '../services/api';
-//import { toast } from 'react-toastify';
-
-//interface Props {
-//    open: boolean;
-//    onClose: () => void;
-//    onCreateSuccess: () => void;
-//    isAdmin?: boolean;
-//}
-
-//interface ItemForm {
-//    name: string;
-//    description: string;
-//    quantity: string;
-//    unitPrice: string;
-//}
-
-//interface User {
-//    id: string;
-//    email: string;
-//    role: string;
-//    merchant?: {
-//        id: string;
-//        name: string;
-//    };
-//}
-
-//interface CreatePurchaseOrderPayload {
-
-//    merchantId: number;
-
-//    totalAmount: number;
-
-//    description: string;
-
-//    dueDate: string;
-
-//    items: {
-
-//        itemName: string;
-
-//        description: string | null;
-
-//        quantity: number;
-
-//        unitPrice: number;
-
-//    }[];
-//}
-
-//const CreatePurchaseOrderModal: React.FC<Props> = ({
-//    open,
-//    onClose,
-//    onCreateSuccess,
-//    isAdmin = false
-//}) => {
-
-//    const { token, user } = useAuth();
-
-//    const [loading, setLoading] = useState(false);
-
-//    const [formData, setFormData] = useState({
-
-//        merchantId: '',
-
-//        description: '',
-
-//        dueDate: '',
-
-//        items: [{
-//            name: '',
-//            description: '',
-//            quantity: '1',
-//            unitPrice: ''
-//        }] as ItemForm[]
-
-//    });
-
-//    // ----------------------------------------------------------------------------------
-//    // CRITICAL FIX: Prevent modal reset on dashboard refresh or re-render
-//    // ----------------------------------------------------------------------------------
-
-//    const wasOpenRef = useRef(false);
-
-//    useEffect(() => {
-
-//        // Only initialize when modal FIRST opens
-//        if (open && !wasOpenRef.current) {
-
-//            const tomorrow = new Date();
-//            tomorrow.setDate(tomorrow.getDate() + 1);
-
-//            const dueDate =
-//                tomorrow.toISOString().split('T')[0];
-
-//            const userObj = user as User | null;
-
-//            const merchantId =
-//                userObj?.merchant?.id ?? '';
-
-//            setFormData({
-
-//                merchantId,
-
-//                description: '',
-
-//                dueDate,
-
-//                items: [{
-//                    name: '',
-//                    description: '',
-//                    quantity: '1',
-//                    unitPrice: ''
-//                }]
-//            });
-
-//            wasOpenRef.current = true;
-//        }
-
-//        // Reset flag when modal closes
-//        if (!open) {
-//            wasOpenRef.current = false;
-//        }
-
-//    }, [open, user]);
-
-//    // ----------------------------------------------------------------------------------
-//    // Calculate total safely
-//    // ----------------------------------------------------------------------------------
-
-//    const calculateTotal = (): number => {
-
-//        return formData.items.reduce(
-
-//            (sum, item) => {
-
-//                const qty =
-//                    Number(item.quantity) || 0;
-
-//                const price =
-//                    Number(item.unitPrice) || 0;
-
-//                return sum + (qty * price);
-
-//            },
-
-//            0
-//        );
-//    };
-
-//    const totalAmount =
-//        calculateTotal();
-
-//    // ----------------------------------------------------------------------------------
-//    // Submit
-//    // ----------------------------------------------------------------------------------
-
-//    const handleSubmit = async (
-//        e: React.FormEvent
-//    ) => {
-
-//        e.preventDefault();
-
-//        if (!token)
-//            return;
-
-//        if (!formData.merchantId && !isAdmin) {
-
-//            toast.error(
-//                "Merchant ID is required"
-//            );
-
-//            return;
-//        }
-
-//        if (totalAmount <= 0) {
-
-//            toast.error(
-//                "Total amount must be greater than zero"
-//            );
-
-//            return;
-//        }
-
-//        try {
-
-//            setLoading(true);
-
-//            const payload: CreatePurchaseOrderPayload = {
-
-//                merchantId:
-//                    Number(formData.merchantId),
-
-//                totalAmount:
-//                    Number(totalAmount),
-
-//                description:
-//                    formData.description,
-
-//                dueDate:
-//                    formData.dueDate,
-
-//                items:
-//                    formData.items.map(item => ({
-
-//                        itemName:
-//                            item.name,
-
-//                        description:
-//                            item.description || null,
-
-//                        quantity:
-//                            Number(item.quantity),
-
-//                        unitPrice:
-//                            Number(item.unitPrice)
-//                    }))
-//            };
-
-//            await api.post(
-
-//                "/purchase-orders",
-
-//                payload,
-
-//                {
-//                    headers: {
-//                        Authorization:
-//                            `Bearer ${token}`
-//                    }
-//                }
-//            );
-
-//            toast.success(
-//                "Purchase Order created successfully"
-//            );
-
-//            onCreateSuccess();
-
-//            onClose();
-
-//        }
-//        catch (error: any) {
-
-//            toast.error(
-//                error.response?.data?.message ||
-//                "Failed to create Purchase Order"
-//            );
-//        }
-//        finally {
-
-//            setLoading(false);
-//        }
-//    };
-
-//    // ----------------------------------------------------------------------------------
-//    // Item Handlers
-//    // ----------------------------------------------------------------------------------
-
-//    const handleItemChange =
-//        (index: number, field: keyof ItemForm, value: string) => {
-
-//            const items =
-//                [...formData.items];
-
-//            items[index] = {
-//                ...items[index],
-//                [field]: value
-//            };
-
-//            setFormData({
-//                ...formData,
-//                items
-//            });
-//        };
-
-//    const handleAddItem = () => {
-
-//        setFormData({
-
-//            ...formData,
-
-//            items: [
-
-//                ...formData.items,
-
-//                {
-//                    name: '',
-//                    description: '',
-//                    quantity: '1',
-//                    unitPrice: ''
-//                }
-//            ]
-//        });
-//    };
-
-//    const handleRemoveItem =
-//        (index: number) => {
-
-//            if (formData.items.length <= 1)
-//                return;
-
-//            setFormData({
-
-//                ...formData,
-
-//                items:
-//                    formData.items.filter(
-//                        (_, i) => i !== index
-//                    )
-//            });
-//        };
-
-//    // ----------------------------------------------------------------------------------
-//    // UI
-//    // ----------------------------------------------------------------------------------
-
-//    return (
-
-//        <Modal
-//            show={open}
-//            onHide={onClose}
-//            centered
-//            size="lg"
-//        >
-
-//            <Modal.Header closeButton>
-
-//                <Modal.Title>
-//                    Create Purchase Order
-//                </Modal.Title>
-
-//            </Modal.Header>
-
-//            <Modal.Body>
-
-//                <Form onSubmit={handleSubmit}>
-
-//                    <Form.Group>
-
-//                        <Form.Label>
-//                            Merchant ID
-//                        </Form.Label>
-
-//                        <Form.Control
-
-//                            value={formData.merchantId}
-
-//                            onChange={e =>
-//                                setFormData({
-//                                    ...formData,
-//                                    merchantId: e.target.value
-//                                })
-//                            }
-
-//                            disabled={!isAdmin}
-//                        />
-
-//                    </Form.Group>
-
-//                    <Form.Group className="mt-3">
-
-//                        <Form.Label>
-//                            Description
-//                        </Form.Label>
-
-//                        <Form.Control
-
-//                            value={formData.description}
-
-//                            onChange={e =>
-//                                setFormData({
-//                                    ...formData,
-//                                    description: e.target.value
-//                                })
-//                            }
-//                        />
-
-//                    </Form.Group>
-
-//                    <Form.Group className="mt-3">
-
-//                        <Form.Label>
-//                            Due Date
-//                        </Form.Label>
-
-//                        <Form.Control
-
-//                            type="date"
-
-//                            value={formData.dueDate}
-
-//                            onChange={e =>
-//                                setFormData({
-//                                    ...formData,
-//                                    dueDate: e.target.value
-//                                })
-//                            }
-//                        />
-
-//                    </Form.Group>
-
-//                    <hr />
-
-//                    {formData.items.map((item, index) => (
-
-//                        <Row key={index} className="mb-2">
-
-//                            <Col>
-
-//                                <Form.Control
-//                                    placeholder="Item Name"
-//                                    value={item.name}
-//                                    onChange={e =>
-//                                        handleItemChange(
-//                                            index,
-//                                            "name",
-//                                            e.target.value
-//                                        )
-//                                    }
-//                                />
-
-//                            </Col>
-
-//                            <Col>
-
-//                                <Form.Control
-//                                    placeholder="Quantity"
-//                                    value={item.quantity}
-//                                    onChange={e =>
-//                                        handleItemChange(
-//                                            index,
-//                                            "quantity",
-//                                            e.target.value
-//                                        )
-//                                    }
-//                                />
-
-//                            </Col>
-
-//                            <Col>
-
-//                                <Form.Control
-//                                    placeholder="Unit Price"
-//                                    value={item.unitPrice}
-//                                    onChange={e =>
-//                                        handleItemChange(
-//                                            index,
-//                                            "unitPrice",
-//                                            e.target.value
-//                                        )
-//                                    }
-//                                />
-
-//                            </Col>
-
-//                            <Col xs="auto">
-
-//                                <Button
-//                                    variant="danger"
-//                                    onClick={() =>
-//                                        handleRemoveItem(index)
-//                                    }
-//                                >
-//                                    X
-//                                </Button>
-
-//                            </Col>
-
-//                        </Row>
-//                    ))}
-
-//                    <Button
-//                        onClick={handleAddItem}
-//                        className="mt-2"
-//                    >
-//                        Add Item
-//                    </Button>
-
-//                    <hr />
-
-//                    <h5>
-//                        Total: ₦{totalAmount.toLocaleString()}
-//                    </h5>
-
-//                    <Button
-//                        type="submit"
-//                        disabled={loading}
-//                    >
-//                        {loading
-//                            ? "Creating..."
-//                            : "Create Purchase Order"}
-//                    </Button>
-
-//                </Form>
-
-//            </Modal.Body>
-
-//        </Modal>
-//    );
-//};
-
-//export default CreatePurchaseOrderModal;
-
-
-
-
-
-// src/components/CreatePurchaseOrderModal.tsx
-// ----------------------------------------------------------------------------------
-// FINAL PRODUCTION VERSION — PAYVERIFY COMPATIBLE (STATE PERSISTENCE FIXED)
-//
-// CRITICAL FIX IMPLEMENTED:
-//
-// Problem:
-// Dashboard auto-refresh and parent re-renders were causing this modal component
-// to unmount and remount, which wiped all user-entered form data.
-//
-// Root Cause:
-// React-Bootstrap Modal unmounts its children during parent refresh cycles.
-//
-// Solution:
-// Added formCacheRef using useRef to persist form state outside component lifecycle.
-// This ensures data survives re-renders and remounts.
-//
-// Result:
-// ✔ No form reset on Add Item
-// ✔ No form reset on typing
-// ✔ No form reset on tabbing fields
-// ✔ No form reset on dashboard refresh
-// ✔ Enterprise-grade stability
-// ----------------------------------------------------------------------------------
-
-
-//import { useState, useEffect, useRef } from 'react';
-//import { Modal, Button, Form, Row, Col } from 'react-bootstrap';
-//import { useAuth } from '../contexts/AuthContext';
-//import api from '../services/api';
-//import { toast } from 'react-toastify';
-
-//interface Props {
-//    open: boolean;
-//    onClose: () => void;
-//    onCreateSuccess: () => void;
-//    isAdmin?: boolean;
-//}
-
-//interface ItemForm {
-//    name: string;
-//    description: string;
-//    quantity: string;
-//    unitPrice: string;
-//}
-
-//interface User {
-//    id: string;
-//    email: string;
-//    role: string;
-//    merchant?: {
-//        id: string;
-//        name: string;
-//    };
-//}
-
-//interface CreatePurchaseOrderPayload {
-
-//    merchantId: number;
-
-//    totalAmount: number;
-
-//    description: string;
-
-//    dueDate: string;
-
-//    items: {
-
-//        itemName: string;
-
-//        description: string | null;
-
-//        quantity: number;
-
-//        unitPrice: number;
-
-//    }[];
-//}
-
-//const CreatePurchaseOrderModal: React.FC<Props> = ({
-//    open,
-//    onClose,
-//    onCreateSuccess,
-//    isAdmin = false
-//}) => {
-
-//    const { token, user } = useAuth();
-
-//    const [loading, setLoading] = useState(false);
-
-//    // ----------------------------------------------------------------------------------
-//    // CRITICAL FIX: Persist form state outside React render lifecycle
-//    //
-//    // WHY:
-//    // When dashboard refreshes, modal unmounts and remounts.
-//    // Normal useState would reset.
-//    //
-//    // useRef persists data across renders and remounts.
-//    // ----------------------------------------------------------------------------------
-
-//    const formCacheRef = useRef<any>(null);
-
-//    // ----------------------------------------------------------------------------------
-//    // Initialize form state from cache OR default
-//    // ----------------------------------------------------------------------------------
-
-//    const [formData, setFormData] = useState(() => {
-
-//        // If cached state exists, restore it
-//        if (formCacheRef.current) {
-//            return formCacheRef.current;
-//        }
-
-//        // Otherwise initialize fresh form
-//        const tomorrow = new Date();
-//        tomorrow.setDate(tomorrow.getDate() + 1);
-
-//        const dueDate =
-//            tomorrow.toISOString().split('T')[0];
-
-//        const userObj = user as User | null;
-
-//        const merchantId =
-//            userObj?.merchant?.id ?? '';
-
-//        return {
-
-//            merchantId,
-
-//            description: '',
-
-//            dueDate,
-
-//            items: [{
-//                name: '',
-//                description: '',
-//                quantity: '1',
-//                unitPrice: ''
-//            }]
-//        };
-//    });
-
-//    // ----------------------------------------------------------------------------------
-//    // Persist formData into cache on every change
-//    // This ensures data survives component remounts
-//    // ----------------------------------------------------------------------------------
-
-//    useEffect(() => {
-
-//        formCacheRef.current = formData;
-
-//    }, [formData]);
-
-//    // ----------------------------------------------------------------------------------
-//    // Calculate total safely
-//    // ----------------------------------------------------------------------------------
-
-//    const calculateTotal = (): number => {
-
-//        return formData.items.reduce(
-
-//            (sum: number, item: ItemForm) => {
-
-//                const qty =
-//                    Number(item.quantity) || 0;
-
-//                const price =
-//                    Number(item.unitPrice) || 0;
-
-//                return sum + (qty * price);
-
-//            },
-
-//            0
-//        );
-//    };
-
-//    const totalAmount =
-//        calculateTotal();
-
-//    // ----------------------------------------------------------------------------------
-//    // Submit
-//    // ----------------------------------------------------------------------------------
-
-//    const handleSubmit = async (
-//        e: React.FormEvent
-//    ) => {
-
-//        e.preventDefault();
-
-//        if (!token)
-//            return;
-
-//        if (!formData.merchantId && !isAdmin) {
-
-//            toast.error(
-//                "Merchant ID is required"
-//            );
-
-//            return;
-//        }
-
-//        if (totalAmount <= 0) {
-
-//            toast.error(
-//                "Total amount must be greater than zero"
-//            );
-
-//            return;
-//        }
-
-//        try {
-
-//            setLoading(true);
-
-//            const payload: CreatePurchaseOrderPayload = {
-
-//                merchantId:
-//                    Number(formData.merchantId),
-
-//                totalAmount:
-//                    Number(totalAmount),
-
-//                description:
-//                    formData.description,
-
-//                dueDate:
-//                    formData.dueDate,
-
-//                items:
-//                    formData.items.map(item => ({
-
-//                        itemName:
-//                            item.name,
-
-//                        description:
-//                            item.description || null,
-
-//                        quantity:
-//                            Number(item.quantity),
-
-//                        unitPrice:
-//                            Number(item.unitPrice)
-//                    }))
-//            };
-
-//            await api.post(
-
-//                "/purchase-orders",
-
-//                payload,
-
-//                {
-//                    headers: {
-//                        Authorization:
-//                            `Bearer ${token}`
-//                    }
-//                }
-//            );
-
-//            toast.success(
-//                "Purchase Order created successfully"
-//            );
-
-//            // ----------------------------------------------------------------------------------
-//            // CRITICAL FIX: Clear cache after successful creation
-//            // Prevents stale data appearing next time modal opens
-//            // ----------------------------------------------------------------------------------
-
-//            formCacheRef.current = null;
-
-//            onCreateSuccess();
-
-//            onClose();
-
-//        }
-//        catch (error: any) {
-
-//            toast.error(
-//                error.response?.data?.message ||
-//                "Failed to create Purchase Order"
-//            );
-//        }
-//        finally {
-
-//            setLoading(false);
-//        }
-//    };
-
-//    // ----------------------------------------------------------------------------------
-//    // Item Handlers
-//    // ----------------------------------------------------------------------------------
-
-//    const handleItemChange =
-//        (index: number, field: keyof ItemForm, value: string) => {
-
-//            const items =
-//                [...formData.items];
-
-//            items[index] = {
-//                ...items[index],
-//                [field]: value
-//            };
-
-//            setFormData({
-//                ...formData,
-//                items
-//            });
-//        };
-
-//    const handleAddItem = () => {
-
-//        setFormData({
-
-//            ...formData,
-
-//            items: [
-
-//                ...formData.items,
-
-//                {
-//                    name: '',
-//                    description: '',
-//                    quantity: '1',
-//                    unitPrice: ''
-//                }
-//            ]
-//        });
-//    };
-
-//    const handleRemoveItem =
-//        (index: number) => {
-
-//            if (formData.items.length <= 1)
-//                return;
-
-//            setFormData({
-
-//                ...formData,
-
-//                items:
-//                    formData.items.filter(
-//                        (_, i) => i !== index
-//                    )
-//            });
-//        };
-
-//    // ----------------------------------------------------------------------------------
-//    // UI
-//    // ----------------------------------------------------------------------------------
-
-//    return (
-
-//        <Modal
-//            show={open}
-//            onHide={onClose}
-//            centered
-//            size="lg"
-//        >
-
-//            <Modal.Header closeButton>
-
-//                <Modal.Title>
-//                    Create Purchase Order
-//                </Modal.Title>
-
-//            </Modal.Header>
-
-//            <Modal.Body>
-
-//                <Form onSubmit={handleSubmit}>
-
-//                    <Form.Group>
-
-//                        <Form.Label>
-//                            Merchant ID
-//                        </Form.Label>
-
-//                        <Form.Control
-
-//                            value={formData.merchantId}
-
-//                            onChange={e =>
-//                                setFormData({
-//                                    ...formData,
-//                                    merchantId: e.target.value
-//                                })
-//                            }
-
-//                            disabled={!isAdmin}
-//                        />
-
-//                    </Form.Group>
-
-//                    <Form.Group className="mt-3">
-
-//                        <Form.Label>
-//                            Description
-//                        </Form.Label>
-
-//                        <Form.Control
-
-//                            value={formData.description}
-
-//                            onChange={e =>
-//                                setFormData({
-//                                    ...formData,
-//                                    description: e.target.value
-//                                })
-//                            }
-//                        />
-
-//                    </Form.Group>
-
-//                    <Form.Group className="mt-3">
-
-//                        <Form.Label>
-//                            Due Date
-//                        </Form.Label>
-
-//                        <Form.Control
-
-//                            type="date"
-
-//                            value={formData.dueDate}
-
-//                            onChange={e =>
-//                                setFormData({
-//                                    ...formData,
-//                                    dueDate: e.target.value
-//                                })
-//                            }
-//                        />
-
-//                    </Form.Group>
-
-//                    <hr />
-
-//                    {formData.items.map((item, index) => (
-
-//                        <Row key={index} className="mb-2">
-
-//                            <Col>
-
-//                                <Form.Control
-//                                    placeholder="Item Name"
-//                                    value={item.name}
-//                                    onChange={e =>
-//                                        handleItemChange(
-//                                            index,
-//                                            "name",
-//                                            e.target.value
-//                                        )
-//                                    }
-//                                />
-
-//                            </Col>
-
-//                            <Col>
-
-//                                <Form.Control
-//                                    placeholder="Quantity"
-//                                    value={item.quantity}
-//                                    onChange={e =>
-//                                        handleItemChange(
-//                                            index,
-//                                            "quantity",
-//                                            e.target.value
-//                                        )
-//                                    }
-//                                />
-
-//                            </Col>
-
-//                            <Col>
-
-//                                <Form.Control
-//                                    placeholder="Unit Price"
-//                                    value={item.unitPrice}
-//                                    onChange={e =>
-//                                        handleItemChange(
-//                                            index,
-//                                            "unitPrice",
-//                                            e.target.value
-//                                        )
-//                                    }
-//                                />
-
-//                            </Col>
-
-//                            <Col xs="auto">
-
-//                                <Button
-//                                    variant="danger"
-//                                    onClick={() =>
-//                                        handleRemoveItem(index)
-//                                    }
-//                                >
-//                                    X
-//                                </Button>
-
-//                            </Col>
-
-//                        </Row>
-//                    ))}
-
-//                    <Button
-//                        onClick={handleAddItem}
-//                        className="mt-2"
-//                    >
-//                        Add Item
-//                    </Button>
-
-//                    <hr />
-
-//                    <h5>
-//                        Total: ₦{totalAmount.toLocaleString()}
-//                    </h5>
-
-//                    <Button
-//                        type="submit"
-//                        disabled={loading}
-//                    >
-//                        {loading
-//                            ? "Creating..."
-//                            : "Create Purchase Order"}
-//                    </Button>
-
-//                </Form>
-
-//            </Modal.Body>
-
-//        </Modal>
-//    );
-//};
-
-//export default CreatePurchaseOrderModal;
-
-
-
-//// src/components/CreatePurchaseOrderModal.tsx
-//// ----------------------------------------------------------------------------------
-//// PAYVERIFY — Create Purchase Order Modal
-////
-//// FIXES APPLIED (ONLY FOR THE ORIGINAL 5 TS7006 ERRORS):
-////
-//// 1) Typed callback params for .reduce(), .map(), .filter()
-////    - This removes "implicitly has an 'any' type" errors under TS strict mode.
-//// 2) Typed formCacheRef to avoid cascading inference issues.
-//// 3) NO behavior change: same UI, same payload, same caching logic.
-//// ----------------------------------------------------------------------------------
-
-//import { useState, useEffect, useRef } from 'react';
-//import { Modal, Button, Form, Row, Col } from 'react-bootstrap';
-//import { useAuth } from '../contexts/AuthContext';
-//import api from '../services/api';
-//import { toast } from 'react-toastify';
-
-//interface Props {
-//    open: boolean;
-//    onClose: () => void;
-//    onCreateSuccess: () => void;
-//    isAdmin?: boolean;
-//}
-
-//interface ItemForm {
-//    name: string;
-//    description: string;
-//    quantity: string;
-//    unitPrice: string;
-//}
-
-//interface User {
-//    id: string;
-//    email: string;
-//    role: string;
-//    merchant?: {
-//        id: string;
-//        name: string;
-//    };
-//}
-
-//// Added: Typed form shape so TS can infer callback types safely
-//interface PurchaseOrderFormData {
-//    merchantId: string;
-//    description: string;
-//    dueDate: string;
-//    items: ItemForm[];
-//}
-
-//interface CreatePurchaseOrderPayload {
-//    merchantId: number;
-//    totalAmount: number;
-//    description: string;
-//    dueDate: string;
-//    items: {
-//        itemName: string;
-//        description: string | null;
-//        quantity: number;
-//        unitPrice: number;
-//    }[];
-//}
-
-//const CreatePurchaseOrderModal: React.FC<Props> = ({
-//    open,
-//    onClose,
-//    onCreateSuccess,
-//    isAdmin = false
-//}) => {
-
-//    const { token, user } = useAuth();
-
-//    const [loading, setLoading] = useState(false);
-
-//    // FIXED: typed ref so it doesn't become "any" and cause TS7006 inside callbacks
-//    const formCacheRef = useRef<PurchaseOrderFormData | null>(null);
-
-//    // FIXED: typed state so TS knows formData.items is ItemForm[]
-//    const [formData, setFormData] = useState<PurchaseOrderFormData>(() => {
-
-//        // Restore cached state when the modal is remounted
-//        if (formCacheRef.current) {
-//            return formCacheRef.current;
-//        }
-
-//        // Default initialize
-//        const tomorrow = new Date();
-//        tomorrow.setDate(tomorrow.getDate() + 1);
-
-//        const dueDate =
-//            tomorrow.toISOString().split('T')[0];
-
-//        const userObj = user as User | null;
-
-//        const merchantId =
-//            userObj?.merchant?.id ?? '';
-
-//        return {
-//            merchantId,
-//            description: '',
-//            dueDate,
-//            items: [{
-//                name: '',
-//                description: '',
-//                quantity: '1',
-//                unitPrice: ''
-//            }]
-//        };
-//    });
-
-//    // Persist form state so it survives dashboard refreshes / remounts
-//    useEffect(() => {
-//        formCacheRef.current = formData;
-//    }, [formData]);
-
-//    // ----------------------------------------------------------------------------------
-//    // Calculate total safely
-//    // ----------------------------------------------------------------------------------
-
-//    const calculateTotal = (): number => {
-
-//        // FIXED TS7006: typed (sum, item)
-//        return formData.items.reduce(
-//            (sum: number, item: ItemForm) => {
-
-//                const qty =
-//                    Number(item.quantity) || 0;
-
-//                const price =
-//                    Number(item.unitPrice) || 0;
-
-//                return sum + (qty * price);
-//            },
-//            0
-//        );
-//    };
-
-//    const totalAmount =
-//        calculateTotal();
-
-//    // ----------------------------------------------------------------------------------
-//    // Submit
-//    // ----------------------------------------------------------------------------------
-
-//    const handleSubmit = async (
-//        e: React.FormEvent
-//    ) => {
-
-//        e.preventDefault();
-
-//        if (!token)
-//            return;
-
-//        if (!formData.merchantId && !isAdmin) {
-
-//            toast.error(
-//                "Merchant ID is required"
-//            );
-
-//            return;
-//        }
-
-//        if (totalAmount <= 0) {
-
-//            toast.error(
-//                "Total amount must be greater than zero"
-//            );
-
-//            return;
-//        }
-
-//        try {
-
-//            setLoading(true);
-
-//            const payload: CreatePurchaseOrderPayload = {
-
-//                merchantId:
-//                    Number(formData.merchantId),
-
-//                totalAmount:
-//                    Number(totalAmount),
-
-//                description:
-//                    formData.description,
-
-//                dueDate:
-//                    formData.dueDate,
-
-//                // FIXED TS7006: typed item
-//                items:
-//                    formData.items.map((item: ItemForm) => ({
-
-//                        itemName:
-//                            item.name,
-
-//                        description:
-//                            item.description || null,
-
-//                        quantity:
-//                            Number(item.quantity),
-
-//                        unitPrice:
-//                            Number(item.unitPrice)
-//                    }))
-//            };
-
-//            await api.post(
-//                "/purchase-orders",
-//                payload,
-//                {
-//                    headers: {
-//                        Authorization:
-//                            `Bearer ${token}`
-//                    }
-//                }
-//            );
-
-//            toast.success(
-//                "Purchase Order created successfully"
-//            );
-
-//            // Clear cache so reopening modal starts fresh
-//            formCacheRef.current = null;
-
-//            onCreateSuccess();
-
-//            onClose();
-
-//        }
-//        catch (error: any) {
-
-//            toast.error(
-//                error.response?.data?.message ||
-//                "Failed to create Purchase Order"
-//            );
-//        }
-//        finally {
-
-//            setLoading(false);
-//        }
-//    };
-
-//    // ----------------------------------------------------------------------------------
-//    // Item Handlers
-//    // ----------------------------------------------------------------------------------
-
-//    const handleItemChange =
-//        (index: number, field: keyof ItemForm, value: string) => {
-
-//            const items =
-//                [...formData.items];
-
-//            items[index] = {
-//                ...items[index],
-//                [field]: value
-//            };
-
-//            setFormData({
-//                ...formData,
-//                items
-//            });
-//        };
-
-//    const handleAddItem = () => {
-
-//        setFormData({
-
-//            ...formData,
-
-//            items: [
-
-//                ...formData.items,
-
-//                {
-//                    name: '',
-//                    description: '',
-//                    quantity: '1',
-//                    unitPrice: ''
-//                }
-//            ]
-//        });
-//    };
-
-//    const handleRemoveItem =
-//        (index: number) => {
-
-//            if (formData.items.length <= 1)
-//                return;
-
-//            setFormData({
-
-//                ...formData,
-
-//                // FIXED TS7006: typed (_, i)
-//                items:
-//                    formData.items.filter(
-//                        (_: ItemForm, i: number) => i !== index
-//                    )
-//            });
-//        };
-
-//    // ----------------------------------------------------------------------------------
-//    // UI
-//    // ----------------------------------------------------------------------------------
-
-//    return (
-
-//        <Modal
-//            show={open}
-//            onHide={onClose}
-//            centered
-//            size="lg"
-//        >
-
-//            <Modal.Header closeButton>
-
-//                <Modal.Title>
-//                    Create Purchase Order
-//                </Modal.Title>
-
-//            </Modal.Header>
-
-//            <Modal.Body>
-
-//                <Form onSubmit={handleSubmit}>
-
-//                    <Form.Group>
-
-//                        <Form.Label>
-//                            Merchant ID
-//                        </Form.Label>
-
-//                        <Form.Control
-
-//                            value={formData.merchantId}
-
-//                            onChange={e =>
-//                                setFormData({
-//                                    ...formData,
-//                                    merchantId: e.target.value
-//                                })
-//                            }
-
-//                            disabled={!isAdmin}
-//                        />
-
-//                    </Form.Group>
-
-//                    <Form.Group className="mt-3">
-
-//                        <Form.Label>
-//                            Description
-//                        </Form.Label>
-
-//                        <Form.Control
-
-//                            value={formData.description}
-
-//                            onChange={e =>
-//                                setFormData({
-//                                    ...formData,
-//                                    description: e.target.value
-//                                })
-//                            }
-//                        />
-
-//                    </Form.Group>
-
-//                    <Form.Group className="mt-3">
-
-//                        <Form.Label>
-//                            Due Date
-//                        </Form.Label>
-
-//                        <Form.Control
-
-//                            type="date"
-
-//                            value={formData.dueDate}
-
-//                            onChange={e =>
-//                                setFormData({
-//                                    ...formData,
-//                                    dueDate: e.target.value
-//                                })
-//                            }
-//                        />
-
-//                    </Form.Group>
-
-//                    <hr />
-
-//                    {/* FIXED TS7006: typed (item, index) */}
-//                    {formData.items.map((item: ItemForm, index: number) => (
-
-//                        <Row key={index} className="mb-2">
-
-//                            <Col>
-//                                <Form.Control
-//                                    placeholder="Item Name"
-//                                    value={item.name}
-//                                    onChange={e =>
-//                                        handleItemChange(
-//                                            index,
-//                                            "name",
-//                                            e.target.value
-//                                        )
-//                                    }
-//                                />
-//                            </Col>
-
-//                            <Col>
-//                                <Form.Control
-//                                    placeholder="Quantity"
-//                                    value={item.quantity}
-//                                    onChange={e =>
-//                                        handleItemChange(
-//                                            index,
-//                                            "quantity",
-//                                            e.target.value
-//                                        )
-//                                    }
-//                                />
-//                            </Col>
-
-//                            <Col>
-//                                <Form.Control
-//                                    placeholder="Unit Price"
-//                                    value={item.unitPrice}
-//                                    onChange={e =>
-//                                        handleItemChange(
-//                                            index,
-//                                            "unitPrice",
-//                                            e.target.value
-//                                        )
-//                                    }
-//                                />
-//                            </Col>
-
-//                            <Col xs="auto">
-//                                <Button
-//                                    variant="danger"
-//                                    onClick={() =>
-//                                        handleRemoveItem(index)
-//                                    }
-//                                >
-//                                    X
-//                                </Button>
-//                            </Col>
-
-//                        </Row>
-//                    ))}
-
-//                    <Button
-//                        onClick={handleAddItem}
-//                        className="mt-2"
-//                    >
-//                        Add Item
-//                    </Button>
-
-//                    <hr />
-
-//                    <h5>
-//                        Total: ₦{totalAmount.toLocaleString()}
-//                    </h5>
-
-//                    <Button
-//                        type="submit"
-//                        disabled={loading}
-//                    >
-//                        {loading
-//                            ? "Creating..."
-//                            : "Create Purchase Order"}
-//                    </Button>
-
-//                </Form>
-
-//            </Modal.Body>
-
-//        </Modal>
-//    );
-//};
-
-//export default CreatePurchaseOrderModal;
-
-
-
-// src/components/CreatePurchaseOrderModal.tsx
+﻿// src/components/CreatePurchaseOrderModal.tsx
 // ----------------------------------------------------------------------------------
 // PAYVERIFY — Create Purchase Order Modal
 //
-// FINAL VERSION WITH ENTERPRISE GLASS / GLOW DASHBOARD STYLING
+// ENTERPRISE GLASS / GLOW DASHBOARD STYLING + OFFLINE ORDER CAPTURE
 //
 // SAFE GUARANTEES:
 //
-// ✔ No logic changes
-// ✔ No state changes
-// ✔ No caching changes
-// ✔ No handler changes
-// ✔ No API changes
+// ✔ Offline orders are queued locally and replayed with a stable reference
+// ✔ Payment never starts while offline
 // ✔ TypeScript safe
 //
 // NEW VISUAL FEATURES:
@@ -2094,12 +23,21 @@ import { useState, useEffect, useRef } from 'react';
 import { Modal, Button, Form, Row, Col } from 'react-bootstrap';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import {
+    enqueueOfflineOrder,
+    isOfflineNetworkError,
+    makeOfflineOrderReference,
+} from '../services/offlineOrderQueue';
 import { toast } from 'react-toastify';
 
 interface Props {
     open: boolean;
     onClose: () => void;
-    onCreateSuccess: () => void;
+    onCreateSuccess: (result: {
+        purchaseOrder?: any;
+        paymentIntent?: any;
+        invoice?: any;
+    }) => void | Promise<void>;
     isAdmin?: boolean;
 }
 
@@ -2110,28 +48,36 @@ interface ItemForm {
     unitPrice: string;
 }
 
-interface User {
-    id: string;
-    email: string;
-    role: string;
-    merchant?: {
-        id: string;
-        name: string;
-    };
-}
+//interface User {
+//    id: string;
+//    email: string;
+//    role: string;
+//    merchant?: {
+//        id: string;
+//        name: string;
+//    };
+//}
 
 interface PurchaseOrderFormData {
-    merchantId: string;
+    //merchantId: string;
     description: string;
     dueDate: string;
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
     items: ItemForm[];
 }
 
 interface CreatePurchaseOrderPayload {
-    merchantId: number;
+    //merchantId: number;
+    poReference?: string;
     totalAmount: number;
     description: string;
     dueDate: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    collectPayment: boolean;
     items: {
         itemName: string;
         description: string | null;
@@ -2147,9 +93,12 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
     isAdmin = false
 }) => {
 
-    const { token, user } = useAuth();
+    const { token, /*user*/ } = useAuth();
 
     const [loading, setLoading] = useState(false);
+    const [isOnline, setIsOnline] = useState(
+        () => typeof navigator === 'undefined' || navigator.onLine
+    );
 
     // Persist form state across modal remounts
     const formCacheRef = useRef<PurchaseOrderFormData | null>(null);
@@ -2166,15 +115,13 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
         const dueDate =
             tomorrow.toISOString().split('T')[0];
 
-        const userObj = user as User | null;
-
-        const merchantId =
-            userObj?.merchant?.id ?? '';
-
         return {
-            merchantId,
+            //merchantId,
             description: '',
             dueDate,
+            customerName: '',
+            customerEmail: '',
+            customerPhone: '',
             items: [{
                 name: '',
                 description: '',
@@ -2187,6 +134,19 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
     useEffect(() => {
         formCacheRef.current = formData;
     }, [formData]);
+
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     // ----------------------------------------------------------------------------------
     // Calculate total
@@ -2224,15 +184,7 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
 
         if (!token)
             return;
-
-        if (!formData.merchantId && !isAdmin) {
-
-            toast.error(
-                "Merchant ID is required"
-            );
-
-            return;
-        }
+       
 
         if (totalAmount <= 0) {
 
@@ -2243,14 +195,16 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
             return;
         }
 
+        let payloadForOfflineCapture: CreatePurchaseOrderPayload | null = null;
+
         try {
 
             setLoading(true);
 
             const payload: CreatePurchaseOrderPayload = {
 
-                merchantId:
-                    Number(formData.merchantId),
+                // Reuse this reference if a connection drop requires a retry.
+                poReference: makeOfflineOrderReference(),
 
                 totalAmount:
                     Number(totalAmount),
@@ -2259,7 +213,20 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
                     formData.description,
 
                 dueDate:
-                    formData.dueDate,
+                        formData.dueDate,
+
+                customerName:
+                    formData.customerName.trim() || undefined,
+
+                customerEmail:
+                    formData.customerEmail.trim() || undefined,
+
+                customerPhone:
+                    formData.customerPhone.trim() || undefined,
+
+                // One merchant action creates the order, invoice, payment link
+                // and QR package. The backend still derives merchant ownership.
+                collectPayment: true,
 
                 items:
                     formData.items.map((item: ItemForm) => ({
@@ -2278,7 +245,21 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
                     }))
             };
 
-            await api.post(
+            payloadForOfflineCapture = payload;
+
+            // Capture locally when the device is offline.  Paystack is not
+            // opened here and no paid receipt can be produced offline.
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                await enqueueOfflineOrder(payload);
+                toast.info(
+                    'Offline order saved. It will sync automatically when you are online; payment has not started.'
+                );
+                formCacheRef.current = null;
+                onClose();
+                return;
+            }
+
+            const response = await api.post(
                 "/purchase-orders",
                 payload,
                 {
@@ -2290,17 +271,35 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
             );
 
             toast.success(
-                "Purchase Order created successfully"
+                "Order and payment package created"
             );
 
             formCacheRef.current = null;
 
-            onCreateSuccess();
+            await onCreateSuccess({
+                purchaseOrder: response.data?.data,
+                paymentIntent: response.data?.paymentIntent,
+                invoice: response.data?.invoice,
+            });
 
             onClose();
 
         }
         catch (error: any) {
+
+            if (isOfflineNetworkError(error) && payloadForOfflineCapture) {
+                try {
+                    await enqueueOfflineOrder(payloadForOfflineCapture);
+                    toast.info(
+                        'Connection lost. Order saved offline and will sync automatically when you are online.'
+                    );
+                    formCacheRef.current = null;
+                    onClose();
+                    return;
+                } catch (queueError) {
+                    console.error('Could not save order offline:', queueError);
+                }
+            }
 
             toast.error(
                 error.response?.data?.message ||
@@ -2397,27 +396,16 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
 
                 <Modal.Body className="pv-modal-body text-light">
 
+                    {!isOnline && (
+                        <div className="pv-offline-callout" role="status">
+                            <strong>Offline capture is on.</strong>
+                            <span>
+                                Save the order now; it will sync when the connection returns. Paystack payment starts only after sync.
+                            </span>
+                        </div>
+                    )}
+
                     <Form onSubmit={handleSubmit}>
-
-                        <Form.Group>
-
-                            <Form.Label>
-                                Merchant ID
-                            </Form.Label>
-
-                            <Form.Control
-                                className="pv-input"
-                                value={formData.merchantId}
-                                onChange={e =>
-                                    setFormData({
-                                        ...formData,
-                                        merchantId: e.target.value
-                                    })
-                                }
-                                disabled={!isAdmin}
-                            />
-
-                        </Form.Group>
 
                         <Form.Group className="mt-3">
 
@@ -2437,6 +425,45 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
                             />
 
                         </Form.Group>
+
+                        <Row>
+                            <Col md={4}>
+                                <Form.Group className="mt-3">
+                                    <Form.Label>Customer name (optional)</Form.Label>
+                                    <Form.Control
+                                        className="pv-input"
+                                        type="text"
+                                        value={formData.customerName}
+                                        placeholder="Walk-in customer"
+                                        onChange={e => setFormData({ ...formData, customerName: e.target.value })}
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={4}>
+                                <Form.Group className="mt-3">
+                                    <Form.Label>Customer phone (optional)</Form.Label>
+                                    <Form.Control
+                                        className="pv-input"
+                                        type="tel"
+                                        value={formData.customerPhone}
+                                        placeholder="e.g. +2348012345678"
+                                        onChange={e => setFormData({ ...formData, customerPhone: e.target.value })}
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={4}>
+                                <Form.Group className="mt-3">
+                                    <Form.Label>Customer email (optional)</Form.Label>
+                                    <Form.Control
+                                        className="pv-input"
+                                        type="email"
+                                        value={formData.customerEmail}
+                                        placeholder="Email receipt"
+                                        onChange={e => setFormData({ ...formData, customerEmail: e.target.value })}
+                                    />
+                                </Form.Group>
+                            </Col>
+                        </Row>
 
                         <Form.Group className="mt-3">
 
@@ -2543,7 +570,9 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
                         >
                             {loading
                                 ? "Creating..."
-                                : "Create Purchase Order"}
+                                : isOnline
+                                    ? "Create & Collect Payment"
+                                    : "Save Order Offline"}
                         </Button>
 
                     </Form>
@@ -2646,6 +675,23 @@ const CreatePurchaseOrderModal: React.FC<Props> = ({
     font-weight: 500;
 
     color: rgba(233,242,255,0.92);
+}
+
+.pv-offline-callout {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 14px;
+    padding: 11px 13px;
+    border: 1px solid rgba(255, 205, 89, .35);
+    border-radius: 12px;
+    background: rgba(255, 181, 45, .12);
+    color: #ffe8a8;
+    font-size: .88rem;
+}
+
+.pv-offline-callout span {
+    color: rgba(255, 239, 194, .82);
 }
 
 

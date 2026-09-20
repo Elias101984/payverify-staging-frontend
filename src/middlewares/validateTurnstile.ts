@@ -14,6 +14,12 @@ interface TurnstileVerifyResponse {
 }
 
 export async function validateTurnstile(req: Request, res: Response, next: NextFunction) {
+    // Local development should not be blocked by Cloudflare. Production keeps
+    // the protection enabled unless explicitly configured otherwise.
+    const isProduction = process.env.NODE_ENV === 'production';
+    const requireTurnstile = process.env.TURNSTILE_REQUIRED === 'true' || isProduction;
+    if (!requireTurnstile) return next();
+
     const token = req.body?.captchaToken;
     if (!token) return res.status(400).json({ message: 'Captcha token is required.' });
 

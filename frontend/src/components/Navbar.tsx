@@ -56,15 +56,20 @@ const Navbar = () => {
                                 <Link className={isActive('/admin-transactions')} to="/admin-transactions">Admin Transactions</Link>
                             </li>
                         )}
-                        <li className="nav-item">
-                            <Link className={isActive('/qr-generator')} to="/qr-generator">QR Generator</Link>
-                        </li>
-                        <li className="nav-item">
-                            <Link className={isActive('/qr-verify')} to="/qr-verify">QR Verification</Link>
-                        </li>
-                        <li className="nav-item">
-                            <Link className={isActive('/register')} to="/register">Register</Link>
-                        </li>
+                        {/*<li className="nav-item">*/}
+                        {/*    <Link className={isActive('/qr-generator')} to="/qr-generator">QR Generator</Link>*/}
+                        {/*</li>*/}
+                        {/*<li className="nav-item">*/}
+                        {/*    <Link className={isActive('/qr-verify')} to="/qr-verify">QR Verification</Link>*/}
+                        {/*</li>*/}
+                        {/* Merchant onboarding is public. Once signed in, keep the
+                            nav focused on the current account; only admins need the
+                            internal "Register merchant" workflow. */}
+                        {user?.role === 'admin' && (
+                            <li className="nav-item">
+                                <Link className={isActive('/register')} to="/register">Register merchant</Link>
+                            </li>
+                        )}
                     </ul>
 
                     <span className="navbar-text text-white me-3">{user?.email}</span>

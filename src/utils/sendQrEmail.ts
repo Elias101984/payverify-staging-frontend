@@ -4,7 +4,10 @@ import sgMail from '@sendgrid/mail';
 import { Merchant } from '../models/Merchant';
 import { createAuditLog } from '../services/auditService';
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+const sendGridApiKey = process.env.SENDGRID_API_KEY?.trim();
+if (sendGridApiKey?.startsWith('SG.')) {
+    sgMail.setApiKey(sendGridApiKey);
+}
 
 type EmailExtras = {
     verifyUrl?: string;
@@ -14,6 +17,11 @@ type EmailExtras = {
 };
 
 export const sendQrEmail = async (merchantId: number, qrUrl: string, extras: EmailExtras = {}) => {
+    if (!sendGridApiKey?.startsWith('SG.')) {
+        console.warn('SENDGRID_API_KEY is not configured; QR email skipped.');
+        return;
+    }
+
     const merchant = await Merchant.findByPk(merchantId);
     if (!merchant) throw new Error(`Merchant with ID ${merchantId} not found.`);
     if (!merchant.email) throw new Error(`Merchant with ID ${merchantId} has no email address.`);

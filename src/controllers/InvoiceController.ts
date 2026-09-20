@@ -846,6 +846,14 @@ import { InvoiceService } from "../services/InvoiceService";
 import { Invoice } from "../models/Invoice";
 import { PaymentIntent } from "../models/PaymentIntent";
 import { PaystackService } from "../services/PaystackService";
+import Merchant from "../models/Merchant";
+import PurchaseOrder from "../models/PurchaseOrder";
+
+const safeDownloadName = (value: string): string =>
+    String(value || "")
+        .trim()
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "PayVerify";
 
 export class InvoiceController {
     private invoiceService = new InvoiceService();
@@ -877,10 +885,22 @@ export class InvoiceController {
             const pdfBuffer =
                 await this.invoiceService.generateInvoicePdfByToken(token);
 
+            const intent = await PaymentIntent.findOne({ where: { token } });
+            const [merchant, purchaseOrder] = intent
+                ? await Promise.all([
+                    Merchant.findByPk(intent.merchant_id),
+                    PurchaseOrder.findByPk(intent.purchase_order_id),
+                ])
+                : [null, null];
+
+            const filename = `${safeDownloadName(merchant?.name || "Merchant")}_${safeDownloadName(
+                purchaseOrder?.poReference || `PO-${purchaseOrder?.id || "Invoice"}`
+            )}.pdf`;
+
             res.setHeader("Content-Type", "application/pdf");
             res.setHeader(
                 "Content-Disposition",
-                `attachment; filename=invoice-${token}.pdf`
+                `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
             );
             res.setHeader("Content-Length", pdfBuffer.length);
 

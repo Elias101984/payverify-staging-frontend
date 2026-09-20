@@ -167,23 +167,26 @@ type PaymentNotificationPayload = {
 
 export class NotificationService {
 
+    private readonly configured: boolean;
+
     constructor() {
 
         const apiKey =
             process.env.SENDGRID_API_KEY;
 
-        if (!apiKey) {
+        if (!apiKey || !apiKey.startsWith("SG.")) {
 
-            console.error(
-                "SENDGRID_API_KEY missing from environment"
+            console.warn(
+                "NotificationService: valid SENDGRID_API_KEY not configured; email disabled"
             );
 
-            throw new Error(
-                "Email service not configured"
-            );
+            this.configured = false;
+            return;
         }
 
         sgMail.setApiKey(apiKey);
+
+        this.configured = true;
 
         console.log(
             "SendGrid initialized successfully"
@@ -200,6 +203,13 @@ export class NotificationService {
     ): Promise<void> {
 
         try {
+
+            if (!this.configured) {
+                console.warn(
+                    "NotificationService: email disabled, skipping send"
+                );
+                return;
+            }
 
             const {
 

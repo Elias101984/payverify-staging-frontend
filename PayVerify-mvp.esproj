@@ -5,6 +5,5 @@
   <ItemGroup>
     <Folder Include="frontend\src\hooks\" />
     <Folder Include="Infra\pipelines\" />
-    <Folder Include="Infra\scripts\" />
   </ItemGroup>
 </Project>

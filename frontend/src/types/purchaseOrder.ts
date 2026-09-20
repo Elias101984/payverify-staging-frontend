@@ -11,6 +11,7 @@ export interface PurchaseOrder {
     merchantName?: string;
     merchantId: string; // Make this required
     customerEmail?: string;
+    customerPhone?: string;
     items?: Array<{
         id: string;
         name: string;

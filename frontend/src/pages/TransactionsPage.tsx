@@ -12,7 +12,7 @@
 // ------------------------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom'; // ⬅️ Link added for clickable refs
+import { Link } from 'react-router-dom';
 import ReactApexChart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import Navbar from '../components/Navbar';
@@ -28,20 +28,20 @@ const S = {
     page: {
         minHeight: '100vh',
         background: `
-      radial-gradient(900px 600px at 10% 110%, rgba(229,216,255,.17), transparent 60%),
-      radial-gradient(800px 500px at 100% -10%, rgba(255,209,217,.17), transparent 60%),
-      linear-gradient(180deg, #f7f7f9 0%, #f0f2f5 60%, #eef1f6 100%)
+      radial-gradient(900px 600px at 10% 110%, rgba(42,123,255,.20), transparent 60%),
+      radial-gradient(800px 500px at 100% -10%, rgba(0,195,137,.10), transparent 60%),
+      linear-gradient(180deg, #07101f 0%, #0b172b 58%, #0e2039 100%)
     `,
     } as React.CSSProperties,
 
     // Big frosted "sheet"
     stage: {
-        background: 'rgba(255,255,255,.78)',
-        border: '1px solid rgba(255,255,255,.8)',
+        background: 'linear-gradient(145deg, rgba(21,40,72,.88), rgba(8,22,44,.88))',
+        border: '1px solid rgba(146,190,255,.22)',
         borderRadius: 24,
         backdropFilter: 'saturate(180%) blur(14px)',
         WebkitBackdropFilter: 'saturate(180%) blur(14px)',
-        boxShadow: '0 50px 120px rgba(15,17,21,.12), 0 8px 22px rgba(15,17,21,.06)',
+        boxShadow: '0 40px 100px rgba(0,0,0,.38), inset 0 1px rgba(255,255,255,.10)',
         padding: 28,
     } as React.CSSProperties,
 
@@ -50,8 +50,8 @@ const S = {
         display: 'inline-block',
         fontSize: 12,
         fontWeight: 700,
-        color: '#2f2f35',
-        background: '#f2f3f7',
+        color: '#dceaff',
+        background: 'rgba(76,145,255,.16)',
         borderRadius: 999,
         padding: '6px 10px',
     } as React.CSSProperties,
@@ -60,23 +60,23 @@ const S = {
         letterSpacing: '-.02em',
         lineHeight: 1.06,
         fontSize: 'clamp(28px, 4.5vw, 48px)',
-        color: '#0f1115',
+        color: '#eef5ff',
         margin: '4px 0 10px',
     } as React.CSSProperties,
     divider: {
         height: 3,
-        background: '#ffd33f',
+        background: 'linear-gradient(90deg,#5ca5ff,#67e4c0)',
         borderRadius: 999,
         margin: '12px 0 4px',
     } as React.CSSProperties,
-    subtle: { color: '#8b909a' } as React.CSSProperties,
+    subtle: { color: '#91a8c7' } as React.CSSProperties,
 
     // Pills
     pillGroup: {
         display: 'flex',
         gap: 8,
         alignItems: 'center',
-        background: '#f3f4f7',
+        background: 'rgba(255,255,255,.07)',
         padding: 6,
         borderRadius: 999,
     } as React.CSSProperties,
@@ -86,31 +86,32 @@ const S = {
         padding: '6px 14px',
         borderRadius: 999,
         fontWeight: 700,
-        color: '#4a4f5a',
+        color: '#9fb4d3',
         cursor: 'pointer',
     } as React.CSSProperties,
     pillActive: {
-        background: '#fff',
-        boxShadow: '0 2px 8px rgba(15,17,21,.08)',
+        background: 'rgba(76,145,255,.28)',
+        color: '#fff',
+        boxShadow: '0 4px 14px rgba(0,0,0,.25)',
     } as React.CSSProperties,
 
     // Glass cards
     card: {
-        backgroundColor: 'rgba(255,255,255,.75)',
-        border: '1px solid rgba(255,255,255,.85)',
+        background: 'linear-gradient(145deg, rgba(24,48,86,.72), rgba(10,27,52,.78))',
+        border: '1px solid rgba(145,190,255,.18)',
         borderRadius: 20,
-        boxShadow: '0 10px 25px rgba(12,17,29,.06), 0 2px 6px rgba(12,17,29,.04)',
-        backdropFilter: 'saturate(180%) blur(8px)',
+        boxShadow: '0 18px 45px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.08)',
+        backdropFilter: 'saturate(160%) blur(12px)',
         WebkitBackdropFilter: 'saturate(180%) blur(8px)',
     } as React.CSSProperties,
 
     // Forms
-    input: { borderRadius: 14, borderColor: '#e6e8ef' } as React.CSSProperties,
-    label: { fontWeight: 600, color: '#6c7280' } as React.CSSProperties,
+    input: { borderRadius: 14, borderColor: 'rgba(145,190,255,.22)', background: 'rgba(5,15,31,.55)', color: '#eef5ff' } as React.CSSProperties,
+    label: { fontWeight: 600, color: '#a8bdd9' } as React.CSSProperties,
     btnPrimary: { borderRadius: 999, paddingInline: 18, fontWeight: 700 } as React.CSSProperties,
 
     // Table polish
-    th: { fontWeight: 700, color: '#6c7280', borderBottomColor: '#eceef3' } as React.CSSProperties,
+    th: { fontWeight: 700, color: '#9fb7d5', borderBottomColor: 'rgba(145,190,255,.18)' } as React.CSSProperties,
 
     // Badges
     badgeSuccess: { background: '#00c389', color: '#fff', borderRadius: 999, padding: '0.5rem 0.7rem', fontWeight: 700 } as React.CSSProperties,
@@ -132,7 +133,7 @@ type Tx = {
 };
 type MerchantLite = { id: number; name: string };
 
-type Interval = 'day' | 'week' | 'month';
+type Interval = 'day' | 'week' | 'month' | 'year';
 
 type TableFilters = {
     status: 'all' | 'pending' | 'completed' | 'failed';
@@ -217,8 +218,9 @@ function useTransactionsData(
     return { rows, count, limit, offset, loading, error, setLimit, setOffset, refetch: fetchTransactions };
 }
 
-function useAnalyticsData(isAdmin: boolean, token?: string) {
+function useAnalyticsData(isAdmin: boolean, token?: string, filters?: TableFilters) {
     const [series, setSeries] = useState<ChartSeriesAxisLike>([]);
+    const [totals, setTotals] = useState({ count: 0, totalAmount: 0, completed: 0, pending: 0, failed: 0 });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [interval, setInterval] = useState<Interval>('day');
@@ -230,26 +232,36 @@ function useAnalyticsData(isAdmin: boolean, token?: string) {
             setError(null);
             const params: any = { interval };
             if (isAdmin && selectedMerchantId !== 'all') params.merchantId = selectedMerchantId;
+            if (filters?.startDate) params.dateFrom = filters.startDate;
+            if (filters?.endDate) params.dateTo = filters.endDate;
 
             const res = await api.get('/analytics/transactions/summary', {
                 params,
                 headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             });
 
-            const pts: Array<{ date: string; totalAmount: number }> = res.data?.series ?? [];
-            setSeries([{ name: 'Amount', data: pts.map((p) => ({ x: p.date, y: Number(p.totalAmount || 0) })) }]);
+            const pts: Array<{ bucket?: string; date?: string; totalAmount: number }> = res.data?.series ?? [];
+            setSeries([{ name: 'Amount', data: pts.map((p) => ({ x: p.bucket ?? p.date ?? '', y: Number(p.totalAmount || 0) })) }]);
+            setTotals({
+                count: Number(res.data?.totals?.count || 0),
+                totalAmount: Number(res.data?.totals?.totalAmount || 0),
+                completed: Number(res.data?.totals?.completed || 0),
+                pending: Number(res.data?.totals?.pending || 0),
+                failed: Number(res.data?.totals?.failed || 0),
+            });
         } catch (e: any) {
             console.error(e);
             setError(e?.response?.data?.message || 'Failed to load analytics');
             setSeries([]);
+            setTotals({ count: 0, totalAmount: 0, completed: 0, pending: 0, failed: 0 });
         } finally {
             setLoading(false);
         }
-    }, [interval, isAdmin, selectedMerchantId, token]);
+    }, [interval, isAdmin, selectedMerchantId, token, filters?.startDate, filters?.endDate]);
 
     useEffect(() => { fetchChart(); }, [fetchChart]);
 
-    return { series, loading, error, interval, setInterval, selectedMerchantId, setSelectedMerchantId, refetch: fetchChart };
+    return { series, totals, loading, error, interval, setInterval, selectedMerchantId, setSelectedMerchantId, refetch: fetchChart };
 }
 
 function useMyMerchants(enabled: boolean, token?: string) {
@@ -263,7 +275,8 @@ function useMyMerchants(enabled: boolean, token?: string) {
                 const res = await api.get('/me/merchants', {
                     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                 });
-                const list: MerchantLite[] = (res.data || []).map((m: any) => ({
+                const payload = res.data?.rows ?? res.data ?? [];
+                const list: MerchantLite[] = (Array.isArray(payload) ? payload : []).map((m: any) => ({
                     id: m.id,
                     name: m.name || m.businessName || `#${m.id}`,
                 }));
@@ -624,12 +637,12 @@ function CreateTransactionCard(props: {
 export default function TransactionsPage() {
     const { user, token } = useAuth() as any;
     const isAdmin = (user?.role || '').toLowerCase() === 'admin';
-    const navigate = useNavigate();
 
     const [pendingFilters, setPendingFilters] = useState<TableFilters>({
         status: 'all', merchantId: 'all', startDate: undefined, endDate: undefined, ref: undefined,
     });
     const [appliedFilters, setAppliedFilters] = useState<TableFilters>(pendingFilters);
+    const [viewMode, setViewMode] = useState<'daily' | 'overview'>('daily');
 
     const { rows, count, limit, offset, loading, error, setLimit, setOffset, refetch } =
         useTransactionsData(isAdmin, token, appliedFilters);
@@ -645,21 +658,24 @@ export default function TransactionsPage() {
     }, [rows]);
 
     const {
-        series, loading: chartLoading, error: chartError,
-        interval, setInterval, selectedMerchantId, setSelectedMerchantId, refetch: refetchChart,
-    } = useAnalyticsData(isAdmin, token);
-
-    const { options: myMerchants, selectedId: mySelectedMerchantId, setSelectedId: setMySelectedMerchantId } =
-        useMyMerchants(!isAdmin, token);
+        series, totals, loading: chartLoading, error: chartError,
+        interval, setInterval, selectedMerchantId, setSelectedMerchantId,
+    } = useAnalyticsData(isAdmin, token, appliedFilters);
 
     const handlePrev = () => setOffset((p) => Math.max(0, p - limit));
     const handleNext = () => setOffset((p) => p + limit);
     const handleChangeLimit = (n: number) => { setLimit(n); setOffset(0); };
 
-    const applyFilters = () => setAppliedFilters({ ...pendingFilters });
+    const applyFilters = () => {
+        // Always return to the first page when criteria change; otherwise a
+        // valid filter can appear empty because the old offset is out of range.
+        setOffset(0);
+        setAppliedFilters({ ...pendingFilters });
+    };
     const resetFilters = () => {
         const clean = { status: 'all', merchantId: 'all', startDate: undefined, endDate: undefined, ref: undefined } as TableFilters;
         setPendingFilters(clean);
+        setOffset(0);
         setAppliedFilters(clean);
     };
 
@@ -691,7 +707,37 @@ export default function TransactionsPage() {
     }, [rows]);
 
     return (
-        <div style={S.page}>
+        <div className="pv-transactions-page" style={S.page}>
+            <style>{`
+                .pv-transactions-page { color: #e8f1ff; }
+                .pv-transactions-page .text-muted { color: #c4d5eb !important; }
+                .pv-transactions-page .card-body,
+                .pv-transactions-page .card-body h5,
+                .pv-transactions-page .card-body h6,
+                .pv-transactions-page .card-body label { color: #eef5ff; }
+                .pv-transactions-page .fw-bold { color: #eef5ff; }
+                .pv-transactions-page .fw-bold.text-success { color: #35d6a0 !important; }
+                .pv-transactions-page .fw-bold.text-warning { color: #ffd66e !important; }
+                .pv-transactions-page .fw-bold.text-danger { color: #ff7b88 !important; }
+                .pv-transactions-page .form-control,
+                .pv-transactions-page .form-select {
+                    color: #eef5ff !important;
+                    background-color: rgba(5,15,31,.58) !important;
+                    border-color: rgba(145,190,255,.22) !important;
+                }
+                .pv-transactions-page .form-control::placeholder { color: #6f88a8; }
+                .pv-transactions-page .form-select option { color: #e8f1ff; background: #102441; }
+                .pv-transactions-page .table { --bs-table-bg: transparent; --bs-table-color: #e8f1ff; --bs-table-border-color: rgba(145,190,255,.13); }
+                .pv-transactions-page .table td { color: #e8f1ff !important; }
+                .pv-transactions-page .table thead th { background: rgba(6,17,35,.48); color: #9fb7d5 !important; }
+                .pv-transactions-page .table tbody tr { background: rgba(255,255,255,.025); }
+                .pv-transactions-page .table tbody tr:hover { background: rgba(76,145,255,.12); }
+                .pv-transactions-page .table a { color: #73b0ff !important; }
+                .pv-transactions-page .btn-outline-secondary { color: #b6cbe5; border-color: rgba(145,190,255,.35); }
+                .pv-transactions-page .btn-outline-secondary:hover { color: #fff; background: rgba(76,145,255,.20); }
+                .pv-transactions-page .apexcharts-gridline { stroke: rgba(145,190,255,.14); }
+                .pv-transactions-page .apexcharts-text { fill: #91a8c7; }
+            `}</style>
             <Navbar />
             <main className="container-xl py-5">
                 <div className="position-relative" style={S.stage}>
@@ -706,13 +752,26 @@ export default function TransactionsPage() {
                             </div>
                         </div>
                         <div className="mt-3 mt-md-0" style={S.pillGroup}>
-                            <button type="button" style={{ ...S.pill, ...S.pillActive }}>Daily</button>
-                            <button type="button" style={S.pill}>Overview</button>
+                            <button type="button" onClick={() => setViewMode('daily')} style={viewMode === 'daily' ? { ...S.pill, ...S.pillActive } : S.pill}>Daily</button>
+                            <button type="button" onClick={() => setViewMode('overview')} style={viewMode === 'overview' ? { ...S.pill, ...S.pillActive } : S.pill}>Overview</button>
                         </div>
                     </div>
 
-                    {/* Analytics */}
-                    <div className="card shadow-sm mb-4" style={S.card}>
+                    {/* Analytics / overview */}
+                    {viewMode === 'overview' ? (
+                        <div className="card shadow-sm mb-4" style={S.card}>
+                            <div className="card-body">
+                                <h5 className="mb-1">Transaction overview</h5>
+                                <div className="text-muted mb-3">Summary for the currently selected filters and {interval} interval.</div>
+                                <div className="row g-3">
+                                    <div className="col-6 col-lg-3"><div className="p-3 rounded-3" style={{ background: 'rgba(76,145,255,.14)' }}><div className="text-muted">Total transactions</div><div className="fs-4 fw-bold">{totals.count.toLocaleString()}</div></div></div>
+                                    <div className="col-6 col-lg-3"><div className="p-3 rounded-3" style={{ background: 'rgba(0,195,137,.14)' }}><div className="text-muted">Total GMV</div><div className="fs-4 fw-bold">{fmtNaira(totals.totalAmount)}</div></div></div>
+                                    <div className="col-6 col-lg-3"><div className="p-3 rounded-3" style={{ background: 'rgba(255,214,110,.14)' }}><div className="text-muted">Pending</div><div className="fs-4 fw-bold text-warning">{totals.pending.toLocaleString()}</div></div></div>
+                                    <div className="col-6 col-lg-3"><div className="p-3 rounded-3" style={{ background: 'rgba(255,97,97,.14)' }}><div className="text-muted">Failed</div><div className="fs-4 fw-bold text-danger">{totals.failed.toLocaleString()}</div></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : <div className="card shadow-sm mb-4" style={S.card}>
                         <div className="card-body">
                             <div className="d-flex flex-wrap gap-3 justify-content-between mb-2">
                                 <div className="text-muted">Aggregated amounts by {interval}</div>
@@ -726,6 +785,7 @@ export default function TransactionsPage() {
                                         <option value="day">Day</option>
                                         <option value="week">Week</option>
                                         <option value="month">Month</option>
+                                        <option value="year">Year</option>
                                     </select>
 
                                     {isAdmin && (
@@ -752,46 +812,35 @@ export default function TransactionsPage() {
                                 <ReactApexChart options={chartOptions} series={seriesForApex} type="area" height={300} />
                             )}
                         </div>
-                    </div>
+                    </div>}
 
-                    {/* KPI strip (current page) */}
+                    {/* KPI strip for the selected analytics interval */}
                     <div className="card shadow-sm mb-4" style={S.card}>
                         <div className="card-body">
                             <div className="row g-3 text-center">
                                 <div className="col-6 col-md-2 offset-md-1">
-                                    <div style={S.subtle}>Rows (page)</div>
-                                    <div className="fw-bold fs-5">{pageKpis.total.toLocaleString()}</div>
+                                    <div style={S.subtle}>Transactions</div>
+                                    <div className="fw-bold fs-5">{totals.count.toLocaleString()}</div>
                                 </div>
                                 <div className="col-6 col-md-3">
-                                    <div style={S.subtle}>GMV (page)</div>
-                                    <div className="fw-bold fs-5">{fmtNaira(pageKpis.gmv)}</div>
+                                    <div style={S.subtle}>GMV</div>
+                                    <div className="fw-bold fs-5">{fmtNaira(totals.totalAmount)}</div>
                                 </div>
                                 <div className="col-4 col-md-2">
                                     <div style={S.subtle}>Completed</div>
-                                    <div className="fw-bold text-success">{pageKpis.completed.toLocaleString()}</div>
+                                    <div className="fw-bold text-success">{totals.completed.toLocaleString()}</div>
                                 </div>
                                 <div className="col-4 col-md-2">
                                     <div style={S.subtle}>Pending</div>
-                                    <div className="fw-bold text-warning">{pageKpis.pending.toLocaleString()}</div>
+                                    <div className="fw-bold text-warning">{totals.pending.toLocaleString()}</div>
                                 </div>
                                 <div className="col-4 col-md-2">
                                     <div style={S.subtle}>Failed</div>
-                                    <div className="fw-bold text-danger">{pageKpis.failed.toLocaleString()}</div>
+                                    <div className="fw-bold text-danger">{totals.failed.toLocaleString()}</div>
                                 </div>
                             </div>
                         </div>
                     </div>
-
-                    {/* Create form */}
-                    <CreateTransactionCard
-                        isAdmin={isAdmin}
-                        token={token}
-                        adminMerchantOptions={tableMerchantOptions}
-                        myMerchants={myMerchants}
-                        mySelectedMerchantId={mySelectedMerchantId}
-                        setMySelectedMerchantId={setMySelectedMerchantId}
-                        onSuccess={() => { refetch(); refetchChart(); }}
-                    />
 
                     {/* Filters */}
                     <FiltersCard

@@ -300,3 +300,104 @@ export const getMerchantTransactionsById = async (req: Request, res: Response) =
         return res.status(500).json({ message: 'Server error while fetching transactions by merchant' });
     }
 };
+
+
+/**
+ * GET /api/transactions/:id
+ *
+ * Returns a single transaction.
+ *
+ * Security:
+ * - Admins may retrieve any transaction.
+ * - Merchants may retrieve only transactions belonging to their own Merchant record.
+ * - Merchant identity is derived server-side from the authenticated JWT user.
+ * - We never trust a merchantId supplied by the browser.
+ * - Cross-tenant requests return 404 to avoid revealing that another merchant's
+ *   transaction exists.
+ */
+export const getTransactionDetails = async (req: Request, res: Response) => {
+    try {
+        const transactionId = Number(req.params.id);
+
+        if (!Number.isInteger(transactionId) || transactionId <= 0) {
+            return res.status(400).json({
+                message: 'Invalid transaction id',
+            });
+        }
+
+        const user = (req.user as any) || {};
+        const userId = Number(user.id);
+        const role = String(user.role || '').toLowerCase();
+
+        if (!Number.isInteger(userId) || userId <= 0) {
+            return res.status(401).json({
+                message: 'Unauthorized',
+            });
+        }
+
+        // Admins are intentionally allowed to inspect transactions
+        // across all merchants.
+        if (role === 'admin') {
+            const transaction = await Transaction.findByPk(transactionId, {
+                include: [
+                    {
+                        model: Merchant,
+                        as: 'merchant',
+                        attributes: ['id', 'name'],
+                    },
+                ],
+            });
+
+            if (!transaction) {
+                return res.status(404).json({
+                    message: 'Transaction not found',
+                });
+            }
+
+            return res.status(200).json(transaction);
+        }
+
+        // Resolve merchant ownership from the authenticated user.
+        // Do NOT accept merchantId from params, query string or request body.
+        const merchant = await Merchant.findOne({
+            where: { userId },
+            attributes: ['id'],
+        });
+
+        if (!merchant) {
+            return res.status(404).json({
+                message: 'Transaction not found',
+            });
+        }
+
+        // Critical tenant-isolation check:
+        // both transaction id AND merchant id must match.
+        const transaction = await Transaction.findOne({
+            where: {
+                id: transactionId,
+                merchantId: merchant.id,
+            },
+            include: [
+                {
+                    model: Merchant,
+                    as: 'merchant',
+                    attributes: ['id', 'name'],
+                },
+            ],
+        });
+
+        if (!transaction) {
+            return res.status(404).json({
+                message: 'Transaction not found',
+            });
+        }
+
+        return res.status(200).json(transaction);
+    } catch (err) {
+        console.error('Error fetching transaction details:', err);
+
+        return res.status(500).json({
+            message: 'Server error while fetching transaction details',
+        });
+    }
+};

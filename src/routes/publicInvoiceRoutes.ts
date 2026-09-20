@@ -11,7 +11,15 @@ const controller = new PublicInvoiceController();
 
 //router.get("/invoices/:token", controller.getPublicInvoice.bind(controller));
 
-router.get("/public/invoices/:token", controller.getPublicInvoice.bind(controller));
+router.get(
+    "/public/invoices/:token/status",
+    controller.getPublicInvoiceStatus.bind(controller)
+);
+
+router.get(
+    "/public/invoices/:token",
+    controller.getPublicInvoice.bind(controller)
+);
 
 export default router;
 

@@ -1,5 +1,8 @@
 import express from 'express';
-import { getDashboardStats } from '../controllers/dashboardController';
+import {
+    getDashboardOperations,
+    getDashboardStats,
+} from '../controllers/dashboardController';
 import { verifyJwtMiddleware } from '../middlewares/authMiddleware';
 
 const router = express.Router();
@@ -28,5 +31,6 @@ const router = express.Router();
  *         description: Server error
  */
 router.get('/dashboard', verifyJwtMiddleware, getDashboardStats);
+router.get('/dashboard/operations', verifyJwtMiddleware, getDashboardOperations);
 
 export default router;

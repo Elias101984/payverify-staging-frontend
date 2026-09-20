@@ -109,8 +109,10 @@ Write-Host "Setting secrets directly in Container App..." -ForegroundColor Cyan
 
 # Get or generate secret values
 $DB_URL = "postgresql://$APP_DB_USER`:$APP_DB_PW@$PG_FQDN:5432/$DB_NAME?sslmode=require"
-$JWT_SECRET = "temp-jwt-secret-12345"
-$API_KEY = "ApiKey_dev_1234567"
+$secretBytes = New-Object byte[] 48
+[Security.Cryptography.RandomNumberGenerator]::Fill($secretBytes)
+$JWT_SECRET = [Convert]::ToBase64String($secretBytes)
+$API_KEY = "ApiKey_" + [Guid]::NewGuid().ToString("N")
 
 # Remove existing secrets if they exist
 Write-Host "Clearing existing secrets..." -ForegroundColor Cyan

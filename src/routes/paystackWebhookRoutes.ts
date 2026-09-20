@@ -1,83 +1,52 @@
-﻿//import { Router } from "express";
-//import { PaystackWebhookController } from "../controllers/PaystackWebhookController";
-
-//const router =
-//    Router();
-
-//const controller =
-//    new PaystackWebhookController();
-
-//router.post(
-//    "/paystack",
-//    controller.handleWebhook.bind(controller)
-//);
-
-//export default router;
-
-
-/**
- * ============================================================
+﻿/**
+ * =============================================================================
+ * src/routes/paystackWebhookRoutes.ts
  * PAYSTACK WEBHOOK ROUTES
- * ============================================================
- * PURPOSE:
- * This file is responsible ONLY for routing (Express layer).
+ * =============================================================================
  *
- * WHY THIS FIX WAS NEEDED:
- * Previously, controller logic was mistakenly placed inside this file,
- * which caused:
- * - ❌ No default export
- * - ❌ Route not registered
- * - ❌ Paystack webhook never hit backend
+ * PURPOSE
+ * -----------------------------------------------------------------------------
+ * Routing only. All Paystack business logic remains in:
  *
- * FIX:
- * - Move business logic to controller
- * - Keep this file as a clean router
- * - Export default router for app.ts
- * ============================================================
+ *     PaystackWebhookController
+ *
+ * FINAL PUBLIC ENDPOINT
+ * -----------------------------------------------------------------------------
+ * POST /api/webhooks/paystack
+ *
+ * HOW THE PATH IS FORMED
+ * -----------------------------------------------------------------------------
+ * app.ts mounts this router at:
+ *
+ *     /api/webhooks
+ *
+ * This router registers:
+ *
+ *     /paystack
+ *
+ * Combined URL:
+ *
+ *     /api/webhooks/paystack
+ *
+ * IMPORTANT
+ * -----------------------------------------------------------------------------
+ * Do not mount this router at "/api/webhooks/paystack" while also keeping the
+ * "/paystack" route below. That would create:
+ *
+ *     /api/webhooks/paystack/paystack
+ * =============================================================================
  */
 
 import { Router } from "express";
 import { PaystackWebhookController } from "../controllers/PaystackWebhookController";
 
-/**
- * Create Express router instance
- */
 const router = Router();
+const controller =
+    new PaystackWebhookController();
 
-/**
- * Instantiate controller
- * (keeps logic separate from routing — SRP principle)
- */
-const controller = new PaystackWebhookController();
-
-/**
- * ============================================================
- * 🔥 PAYSTACK WEBHOOK ENDPOINT
- * ============================================================
- * URL:
- * POST /api/webhooks/paystack
- *
- * Full public URL (via ngrok):
- * https://record-threefold-sprite.ngrok-free.dev/api/webhooks/paystack
- *
- * WHAT IT DOES:
- * - Receives Paystack events
- * - Delegates handling to controller
- */
 router.post(
     "/paystack",
     controller.handleWebhook.bind(controller)
 );
 
-/**
- * ============================================================
- * ✅ CRITICAL EXPORT FIX
- * ============================================================
- * This MUST be a default export because app.ts imports it like:
- *
- * import paystackWebhookRoutes from "./routes/paystackWebhookRoutes";
- *
- * Without this, you get:
- * ❌ "has no default export" error
- */
 export default router;
