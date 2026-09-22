@@ -1,44 +1,167 @@
-﻿// src/pages/LoginPage.tsx
-// -----------------------------------------------------------------------------
-// PayVerify Merchant Login (glossy + dark theme, NO NAVBAR)
-//
-// What this does:
-// - Keeps the exact glossy look & feel (inline <StyleBlock/> so styles never go missing)
-// - Does NOT import or render <Navbar />, so the top nav is hidden on login
-// - Preserves your original UX: forgot password link and password visibility toggle,
-//   password visibility toggle, and a placeholder for your Turnstile captcha
-// -----------------------------------------------------------------------------
-
-import React, { useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+﻿import React, { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEnvelope, faLock, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
+import {
+    faEnvelope,
+    faLock,
+    faEye,
+    faEyeSlash,
+} from '@fortawesome/free-solid-svg-icons';
+
+declare global {
+    interface Window {
+        turnstile?: {
+            render: (
+                element: HTMLElement,
+                options: {
+                    sitekey: string;
+                    callback: (token: string) => void;
+                    'expired-callback'?: () => void;
+                    'error-callback'?: () => void;
+                    theme?: 'light' | 'dark' | 'auto';
+                },
+            ) => string;
+            reset: (widgetId?: string) => void;
+            remove: (widgetId?: string) => void;
+        };
+        __payverifyTurnstileLoaded?: () => void;
+    }
+}
+
+const TURNSTILE_SITE_KEY =
+    (import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '') as string;
 
 const LoginPage: React.FC = () => {
     const { login } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const from = (location.state as any)?.from?.pathname || '/dashboard';
+
+    const from =
+        (location.state as { from?: { pathname?: string } })?.from?.pathname ??
+        '/dashboard';
+
+    const turnstileContainer = useRef<HTMLDivElement | null>(null);
+    const widgetId = useRef<string | undefined>(undefined);
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+    const [turnstileReady, setTurnstileReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
-    const [show, setShow] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    useEffect(() => {
+        if (!TURNSTILE_SITE_KEY) {
+            setError('Security verification is not configured.');
+            return;
+        }
+
+        if (window.turnstile) {
+            setTurnstileReady(true);
+            return;
+        }
+
+        const existingScript = document.querySelector(
+            'script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]',
+        );
+
+        if (existingScript) {
+            window.__payverifyTurnstileLoaded = () => {
+                setTurnstileReady(true);
+            };
+            return;
+        }
+
+        window.__payverifyTurnstileLoaded = () => {
+            setTurnstileReady(true);
+        };
+
+        const script = document.createElement('script');
+        script.src =
+            'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=__payverifyTurnstileLoaded&render=explicit';
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+
+        return () => {
+            delete window.__payverifyTurnstileLoaded;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (
+            !turnstileReady ||
+            !TURNSTILE_SITE_KEY ||
+            !window.turnstile ||
+            !turnstileContainer.current ||
+            widgetId.current
+        ) {
+            return;
+        }
+
+        widgetId.current = window.turnstile.render(turnstileContainer.current, {
+            sitekey: TURNSTILE_SITE_KEY,
+            theme: 'dark',
+            callback: (token: string) => {
+                setCaptchaToken(token);
+                setError(null);
+            },
+            'expired-callback': () => {
+                setCaptchaToken(null);
+            },
+            'error-callback': () => {
+                setCaptchaToken(null);
+                setError('Security verification failed. Please try again.');
+            },
+        });
+
+        return () => {
+            if (widgetId.current && window.turnstile) {
+                window.turnstile.remove(widgetId.current);
+                widgetId.current = undefined;
+            }
+        };
+    }, [turnstileReady]);
+
+    const resetTurnstile = () => {
+        setCaptchaToken(null);
+
+        if (widgetId.current && window.turnstile) {
+            window.turnstile.reset(widgetId.current);
+        }
+    };
+
+    const handleSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
         setError(null);
+
+        if (!TURNSTILE_SITE_KEY) {
+            setError('Security verification is not configured.');
+            return;
+        }
+
+        if (!captchaToken) {
+            setError('Please complete the security verification.');
+            return;
+        }
+
         try {
             setSubmitting(true);
-            // The current auth context accepts the captcha field; the server
-            // still owns the actual verification policy.
-            await login(email, password, '');
+
+            // This now sends the actual Turnstile token.
+            await login(email.trim(), password, captchaToken);
+
             navigate(from, { replace: true });
         } catch (err: any) {
             console.error(err);
-            setError(err?.response?.data?.message || 'Login failed');
+            setError(
+                err?.response?.data?.message ||
+                err?.message ||
+                'Login failed. Please check your credentials.',
+            );
+            resetTurnstile();
         } finally {
             setSubmitting(false);
         }
@@ -46,236 +169,198 @@ const LoginPage: React.FC = () => {
 
     return (
         <>
-            {/* No Navbar on this page */}
-            <div className="pv-auth-bg d-flex align-items-center justify-content-center py-5" style={{ minHeight: '100vh' }}>
-                <div className="container" style={{ maxWidth: 520 }}>
-                    <div className="card pv-glass shadow-lg">
-                        <div className="card-body p-4 p-md-5">
-                            {/* Title */}
-                            <h1 className="pv-glossy-title text-center mb-2">PayVerify Merchant Login</h1>
-                            <p className="text-light-50 text-center mb-4">Access your dashboard and tools.</p>
+            <div className="pv-auth-bg">
+                <div className="pv-login-card">
+                    <h1>PayVerify Merchant Login</h1>
+                    <p>Access your dashboard and tools.</p>
 
-                            {/* Form */}
-                            <form onSubmit={handleSubmit} className="row g-3">
-                                {/* Email */}
-                                <div className="col-12">
-                                    <label className="form-label text-light fw-semibold">Email</label>
-                                    <div className="input-group">
-                                        <span className="input-group-text">
-                                            <FontAwesomeIcon icon={faEnvelope} />
-                                        </span>
-                                        <input
-                                            type="email"
-                                            className="form-control"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            placeholder="you@company.com"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Password */}
-                                <div className="col-12">
-                                    <label className="form-label text-light fw-semibold">Password</label>
-                                    <div className="input-group">
-                                        <span className="input-group-text">
-                                            <FontAwesomeIcon icon={faLock} />
-                                        </span>
-                                        <input
-                                            type={show ? 'text' : 'password'}
-                                            className="form-control"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            placeholder="Enter your password"
-                                            required
-                                        />
-                                        {/* Show/Hide toggle */}
-                                        <button
-                                            className="btn btn-outline-secondary"
-                                            type="button"
-                                            onClick={() => setShow((s) => !s)}
-                                            title={show ? 'Hide password' : 'Show password'}
-                                        >
-                                            <FontAwesomeIcon icon={show ? faEyeSlash : faEye} />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Forgot Password */}
-                                <div className="col-12 d-flex justify-content-end mt-n2">
-                                    <Link to="/forgot-password" className="text-decoration-none">
-                                        Forgot Password?
-                                    </Link>
-                                </div>
-
-                                {/* ✅ Captcha (Turnstile) placeholder — keep your existing component here */}
-                                {/* Example: <Turnstile sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY} /> */}
-                                <div className="col-12">
-                                    <div id="pv-captcha-slot" className="d-flex justify-content-center" />
-                                </div>
-
-                                {/* Error */}
-                                {error && (
-                                    <div className="col-12">
-                                        <div className="alert alert-danger mb-0">{error}</div>
-                                    </div>
-                                )}
-
-                                {/* Submit */}
-                                <div className="col-12 d-grid">
-                                    <button type="submit" className="btn btn-primary fw-bold" disabled={submitting}>
-                                        {submitting ? 'Signing in…' : 'Login'}
-                                    </button>
-                                </div>
-
-                                {/* Bank Logos */}
-                                <div className="col-12 text-center mt-2">
-                                    <p className="text-light-50" style={{ fontSize: '0.85rem' }}>
-                                        Trusted by top banks
-                                    </p>
-                                    <div className="d-flex justify-content-center flex-wrap gap-4 align-items-center">
-                                        <div className="text-center">
-                                            <img src="https://logo.clearbit.com/gtbank.com" alt="GTBank" height="28" />
-                                            <div className="logo-label">GTBank</div>
-                                        </div>
-                                        <div className="text-center">
-                                            <img src="https://logo.clearbit.com/accessbankplc.com" alt="Access Bank" height="28" />
-                                            <div className="logo-label">Access Bank</div>
-                                        </div>
-                                        <div className="text-center">
-                                            <img src="https://logo.clearbit.com/ubagroup.com" alt="UBA" height="28" />
-                                            <div className="logo-label">UBA</div>
-                                        </div>
-                                        <div className="text-center">
-                                            <img src="https://logo.clearbit.com/zenithbank.com" alt="Zenith Bank" height="28" />
-                                            <div className="logo-label">Zenith Bank</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </form>
+                    <form onSubmit={handleSubmit}>
+                        <label htmlFor="email">Email</label>
+                        <div className="pv-input">
+                            <FontAwesomeIcon icon={faEnvelope} />
+                            <input
+                                id="email"
+                                type="email"
+                                value={email}
+                                onChange={(event) => setEmail(event.target.value)}
+                                placeholder="you@company.com"
+                                autoComplete="email"
+                                required
+                            />
                         </div>
-                    </div>
+
+                        <label htmlFor="password">Password</label>
+                        <div className="pv-input">
+                            <FontAwesomeIcon icon={faLock} />
+                            <input
+                                id="password"
+                                type={showPassword ? 'text' : 'password'}
+                                value={password}
+                                onChange={(event) => setPassword(event.target.value)}
+                                placeholder="Enter your password"
+                                autoComplete="current-password"
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="pv-eye-button"
+                                onClick={() => setShowPassword((value) => !value)}
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            >
+                                <FontAwesomeIcon
+                                    icon={showPassword ? faEyeSlash : faEye}
+                                />
+                            </button>
+                        </div>
+
+                        <div className="pv-forgot">
+                            <Link to="/forgot-password">Forgot Password?</Link>
+                        </div>
+
+                        <div
+                            ref={turnstileContainer}
+                            className="pv-turnstile"
+                            aria-label="Security verification"
+                        />
+
+                        {error && <div className="pv-error">{error}</div>}
+
+                        <button
+                            type="submit"
+                            className="pv-login-button"
+                            disabled={submitting || !captchaToken}
+                        >
+                            {submitting ? 'Signing in…' : 'Login'}
+                        </button>
+                    </form>
+
+                    <div className="pv-trusted">Trusted by top banks</div>
                 </div>
             </div>
 
-            {/* Inline CSS for the glossy theme (so styles never "go missing") */}
-            <StyleBlock />
+            <style>{`
+        .pv-auth-bg {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 40px 16px;
+          background:
+            radial-gradient(circle at top, rgba(45, 110, 255, .25), transparent 45%),
+            linear-gradient(160deg, #050914, #0c1930 60%, #102d55);
+        }
+
+        .pv-login-card {
+          width: 100%;
+          max-width: 540px;
+          padding: 42px;
+          color: white;
+          border: 1px solid rgba(255,255,255,.2);
+          border-radius: 22px;
+          background: rgba(25, 34, 52, .82);
+          box-shadow: 0 25px 80px rgba(0,0,0,.45);
+          backdrop-filter: blur(16px);
+        }
+
+        .pv-login-card h1 {
+          margin: 0;
+          text-align: center;
+          font-size: 2.25rem;
+          font-weight: 800;
+          color: #f3f7ff;
+        }
+
+        .pv-login-card > p {
+          margin: 10px 0 30px;
+          text-align: center;
+          color: #b9c5d9;
+        }
+
+        .pv-login-card label {
+          display: block;
+          margin: 18px 0 7px;
+          font-weight: 700;
+        }
+
+        .pv-input {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 0 14px;
+          background: #f5f6f8;
+          border-radius: 8px;
+          color: #182235;
+        }
+
+        .pv-input input {
+          width: 100%;
+          padding: 14px 0;
+          border: 0;
+          outline: 0;
+          background: transparent;
+          color: #182235;
+          font-size: 1rem;
+        }
+
+        .pv-eye-button {
+          border: 0;
+          background: transparent;
+          color: #667085;
+          cursor: pointer;
+        }
+
+        .pv-forgot {
+          margin: 14px 0 20px;
+          text-align: right;
+        }
+
+        .pv-forgot a {
+          color: #65a3ff;
+          text-decoration: none;
+        }
+
+        .pv-turnstile {
+          min-height: 70px;
+          display: flex;
+          justify-content: center;
+          margin: 14px 0;
+        }
+
+        .pv-error {
+          margin: 14px 0;
+          padding: 12px;
+          border-radius: 8px;
+          background: #ffd6da;
+          color: #842029;
+        }
+
+        .pv-login-button {
+          width: 100%;
+          margin-top: 12px;
+          padding: 14px;
+          border: 0;
+          border-radius: 8px;
+          background: #2875f5;
+          color: white;
+          font-size: 1.05rem;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .pv-login-button:disabled {
+          cursor: not-allowed;
+          opacity: .55;
+        }
+
+        .pv-trusted {
+          margin-top: 25px;
+          text-align: center;
+          color: #aebbd0;
+          font-size: .9rem;
+        }
+      `}</style>
         </>
     );
 };
-
-/**
- * Inline style block
- * - Darker page background & vignette for high contrast
- * - Glass card with dark tint + highlight strip
- * - Glossy animated title
- * - Heavier fonts for readability on dark surfaces
- */
-const StyleBlock = () => (
-    <style>{`
-    /* --- Background: darker navy with a subtle blue glow --- */
-    .pv-auth-bg {
-      background:
-        radial-gradient(1200px 420px at 50% 0%, rgba(35, 105, 255, 0.20), rgba(0,0,0,0) 55%),
-        linear-gradient(180deg, #05070b 0%, #0a0f19 40%, #0e1a2d 68%, #0f2138 85%, #0f243f 100%);
-      box-shadow: inset 0 0 240px rgba(0,0,0,0.70);
-    }
-
-    /* --- Glassy card with subtle dark underlay --- */
-    .pv-glass {
-      border: 1px solid rgba(255,255,255,0.16);
-      background:
-        linear-gradient(180deg, rgba(5, 10, 20, 0.35), rgba(5, 10, 20, 0.35)),
-        linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.06));
-      backdrop-filter: blur(10px) saturate(140%);
-      -webkit-backdrop-filter: blur(10px) saturate(140%);
-      position: relative;
-      border-radius: 18px;
-      overflow: hidden;
-      color: #eef5ff;
-    }
-    .pv-glass::before {
-      content:"";
-      position:absolute; inset:0;
-      background: linear-gradient(to bottom, rgba(255,255,255,0.18), rgba(255,255,255,0) 36%);
-      pointer-events:none; mix-blend-mode:screen;
-    }
-
-    /* --- Glossy, shiny title with animated sheen --- */
-    .pv-glossy-title {
-      font-weight: 900;
-      letter-spacing: -0.02em;
-      line-height: 1.05;
-      font-size: clamp(1.75rem, 2.2vw + 1rem, 2.4rem);
-      background: linear-gradient(180deg, #ffffff 0%, #d7e7ff 58%, #7fb4ff 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-      filter: drop-shadow(0 2px 10px rgba(0,0,0,.55));
-      position: relative;
-      overflow: hidden;
-      text-align: center;
-    }
-    .pv-glossy-title::after {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: -120%;
-      height: 100%;
-      width: 55%;
-      transform: skewX(-20deg);
-      background: linear-gradient(
-        75deg,
-        rgba(255,255,255,0) 0%,
-        rgba(255,255,255,.75) 10%,
-        rgba(255,255,255,0) 20%
-      );
-      animation: pvTitleShine 3.2s ease-in-out infinite;
-      pointer-events: none;
-    }
-    @keyframes pvTitleShine {
-      0% { left: -120%; }
-      55% { left: 130%; }
-      100% { left: 130%; }
-    }
-
-    /* --- Form polish: heavier weights & brighter surfaces --- */
-    .form-label { font-weight: 800; color: #e9f2ff; }
-    .form-control, .form-select {
-      font-weight: 700;
-      background: rgba(255,255,255,0.92);
-      border: 1px solid rgba(255,255,255,0.35);
-    }
-    .input-group-text {
-      background: rgba(255,255,255,0.92);
-      border: 1px solid rgba(255,255,255,0.35);
-      font-weight: 700;
-    }
-
-    .text-light-50 { color: rgba(233,242,255,.80) !important; }
-
-    .btn-outline-light {
-      border-color: rgba(255,255,255,.45);
-      color: #f0f6ff;
-      font-weight: 800;
-    }
-    .btn-outline-light:hover {
-      background: rgba(255,255,255,.10);
-      border-color: rgba(255,255,255,.65);
-      color: #ffffff;
-    }
-    .btn.btn-primary {
-      font-weight: 900;
-    }
-
-    .logo-label {
-      font-size: .75rem;
-      color: rgba(233,242,255,.9);
-      font-weight: 800;
-      margin-top: 2px;
-    }
-  `}</style>
-);
 
 export default LoginPage;
