@@ -1,16 +1,17 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faEnvelope,
-    faLock,
     faEye,
     faEyeSlash,
+    faLock,
 } from '@fortawesome/free-solid-svg-icons';
+import { useAuth } from '../contexts/AuthContext';
 
-const TURNSTILE_SITE_KEY =
-    (import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '') as string;
+const TURNSTILE_SITE_KEY = String(
+    import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '',
+);
 
 const LoginPage: React.FC = () => {
     const { login } = useAuth();
@@ -22,7 +23,7 @@ const LoginPage: React.FC = () => {
         '/dashboard';
 
     const captchaRef = useRef<HTMLDivElement>(null);
-    const widgetIdRef = useRef<any>(null);
+    const widgetIdRef = useRef<string | null>(null);
     const pollerRef = useRef<number | null>(null);
 
     const [email, setEmail] = useState('');
@@ -39,15 +40,17 @@ const LoginPage: React.FC = () => {
             return;
         }
 
-        if (!document.querySelector('script[data-payverify-turnstile]')) {
-            const script = document.createElement('script');
+        let script = document.querySelector(
+            'script[data-payverify-turnstile]',
+        ) as HTMLScriptElement | null;
 
+        if (!script) {
+            script = document.createElement('script');
             script.src =
                 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
             script.async = true;
             script.defer = true;
             script.dataset.payverifyTurnstile = 'true';
-
             document.head.appendChild(script);
         }
 
@@ -55,7 +58,7 @@ const LoginPage: React.FC = () => {
             if (window.turnstile) {
                 setTurnstileReady(true);
 
-                if (pollerRef.current) {
+                if (pollerRef.current !== null) {
                     window.clearInterval(pollerRef.current);
                     pollerRef.current = null;
                 }
@@ -63,7 +66,7 @@ const LoginPage: React.FC = () => {
         }, 200);
 
         return () => {
-            if (pollerRef.current) {
+            if (pollerRef.current !== null) {
                 window.clearInterval(pollerRef.current);
                 pollerRef.current = null;
             }
@@ -84,16 +87,11 @@ const LoginPage: React.FC = () => {
         widgetIdRef.current = window.turnstile.render(captchaRef.current, {
             sitekey: TURNSTILE_SITE_KEY,
             theme: 'dark',
-
             callback: (token: string) => {
                 setCaptchaToken(token);
                 setError(null);
             },
-
-            'expired-callback': () => {
-                setCaptchaToken('');
-            },
-
+            'expired-callback': () => setCaptchaToken(''),
             'error-callback': () => {
                 setCaptchaToken('');
                 setError('Security verification failed. Please try again.');
@@ -116,7 +114,7 @@ const LoginPage: React.FC = () => {
         }
     };
 
-    const handleSubmit = async (event: React.FormEvent) => {
+    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setError(null);
 
@@ -127,19 +125,14 @@ const LoginPage: React.FC = () => {
 
         try {
             setSubmitting(true);
-
             await login(email.trim(), password, captchaToken);
-
             navigate(from, { replace: true });
         } catch (err: any) {
-            console.error(err);
-
             setError(
                 err?.response?.data?.message ||
                 err?.message ||
                 'Login failed. Please check your credentials.',
             );
-
             resetCaptcha();
         } finally {
             setSubmitting(false);
@@ -147,77 +140,76 @@ const LoginPage: React.FC = () => {
     };
 
     return (
-        <>
-            <div className="pv-login-page">
-                <div className="pv-login-card">
-                    <h1>PayVerify Merchant Login</h1>
-                    <p>Access your dashboard and tools.</p>
+        <div className="pv-login-page">
+            <div className="pv-login-card">
+                <h1>PayVerify Merchant Login</h1>
+                <p>Access your dashboard and tools.</p>
 
-                    <form onSubmit={handleSubmit}>
-                        <label htmlFor="email">Email</label>
+                <form onSubmit={handleSubmit}>
+                    <label htmlFor="email">Email</label>
 
-                        <div className="pv-input">
-                            <FontAwesomeIcon icon={faEnvelope} />
+                    <div className="pv-input">
+                        <FontAwesomeIcon icon={faEnvelope} />
+                        <input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(event) => setEmail(event.target.value)}
+                            placeholder="you@company.com"
+                            autoComplete="email"
+                            required
+                        />
+                    </div>
 
-                            <input
-                                id="email"
-                                type="email"
-                                value={email}
-                                onChange={(event) => setEmail(event.target.value)}
-                                placeholder="you@company.com"
-                                autoComplete="email"
-                                required
-                            />
-                        </div>
+                    <label htmlFor="password">Password</label>
 
-                        <label htmlFor="password">Password</label>
-
-                        <div className="pv-input">
-                            <FontAwesomeIcon icon={faLock} />
-
-                            <input
-                                id="password"
-                                type={showPassword ? 'text' : 'password'}
-                                value={password}
-                                onChange={(event) => setPassword(event.target.value)}
-                                placeholder="Enter your password"
-                                autoComplete="current-password"
-                                required
-                            />
-
-                            <button
-                                type="button"
-                                className="pv-eye-button"
-                                onClick={() => setShowPassword((value) => !value)}
-                            >
-                                <FontAwesomeIcon
-                                    icon={showPassword ? faEyeSlash : faEye}
-                                />
-                            </button>
-                        </div>
-
-                        <div className="pv-forgot">
-                            <Link to="/forgot-password">Forgot Password?</Link>
-                        </div>
-
-                        <div
-                            ref={captchaRef}
-                            className="pv-turnstile"
+                    <div className="pv-input">
+                        <FontAwesomeIcon icon={faLock} />
+                        <input
+                            id="password"
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={(event) => setPassword(event.target.value)}
+                            placeholder="Enter your password"
+                            autoComplete="current-password"
+                            required
                         />
 
-                        {error && <div className="pv-error">{error}</div>}
-
                         <button
-                            type="submit"
-                            className="pv-login-button"
-                            disabled={submitting || !captchaToken}
+                            type="button"
+                            className="pv-eye-button"
+                            onClick={() => setShowPassword((value) => !value)}
+                            aria-label="Toggle password visibility"
                         >
-                            {submitting ? 'Signing in…' : 'Login'}
+                            <FontAwesomeIcon
+                                icon={showPassword ? faEyeSlash : faEye}
+                            />
                         </button>
-                    </form>
+                    </div>
 
-                    <div className="pv-trusted">Trusted by top banks</div>
-                </div>
+                    <div className="pv-forgot">
+                        <Link to="/forgot-password">Forgot Password?</Link>
+                    </div>
+
+                    <div className="pv-register-prompt">
+                        <span>New merchant?</span>{' '}
+                        <Link to="/register">Register your business</Link>
+                    </div>
+
+                    <div ref={captchaRef} className="pv-turnstile" />
+
+                    {error && <div className="pv-error">{error}</div>}
+
+                    <button
+                        type="submit"
+                        className="pv-login-button"
+                        disabled={submitting || !captchaToken}
+                    >
+                        {submitting ? 'Signing in…' : 'Login'}
+                    </button>
+                </form>
+
+                <div className="pv-trusted">Trusted by top banks</div>
             </div>
 
             <style>{`
@@ -291,13 +283,25 @@ const LoginPage: React.FC = () => {
         }
 
         .pv-forgot {
-          margin: 14px 0 20px;
+          margin: 14px 0 10px;
           text-align: right;
         }
 
-        .pv-forgot a {
+        .pv-forgot a,
+        .pv-register-prompt a {
           color: #65a3ff;
           text-decoration: none;
+        }
+
+        .pv-register-prompt {
+          margin: 0 0 18px;
+          text-align: center;
+          color: #b9c5d9;
+          font-size: 14px;
+        }
+
+        .pv-register-prompt a {
+          font-weight: 700;
         }
 
         .pv-turnstile {
@@ -340,7 +344,7 @@ const LoginPage: React.FC = () => {
           font-size: .9rem;
         }
       `}</style>
-        </>
+        </div>
     );
 };
 
