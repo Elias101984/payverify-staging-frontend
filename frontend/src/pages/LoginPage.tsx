@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -8,26 +8,6 @@ import {
     faEye,
     faEyeSlash,
 } from '@fortawesome/free-solid-svg-icons';
-
-declare global {
-    interface Window {
-        turnstile?: {
-            render: (
-                element: HTMLElement,
-                options: {
-                    sitekey: string;
-                    callback: (token: string) => void;
-                    'expired-callback'?: () => void;
-                    'error-callback'?: () => void;
-                    theme?: 'light' | 'dark' | 'auto';
-                },
-            ) => string;
-            reset: (widgetId?: string) => void;
-            remove: (widgetId?: string) => void;
-        };
-        __payverifyTurnstileLoaded?: () => void;
-    }
-}
 
 const TURNSTILE_SITE_KEY =
     (import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '') as string;
@@ -41,16 +21,17 @@ const LoginPage: React.FC = () => {
         (location.state as { from?: { pathname?: string } })?.from?.pathname ??
         '/dashboard';
 
-    const turnstileContainer = useRef<HTMLDivElement | null>(null);
-    const widgetId = useRef<string | undefined>(undefined);
+    const captchaRef = useRef<HTMLDivElement>(null);
+    const widgetIdRef = useRef<any>(null);
+    const pollerRef = useRef<number | null>(null);
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+    const [captchaToken, setCaptchaToken] = useState('');
     const [turnstileReady, setTurnstileReady] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [submitting, setSubmitting] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!TURNSTILE_SITE_KEY) {
@@ -58,35 +39,34 @@ const LoginPage: React.FC = () => {
             return;
         }
 
-        if (window.turnstile) {
-            setTurnstileReady(true);
-            return;
+        if (!document.querySelector('script[data-payverify-turnstile]')) {
+            const script = document.createElement('script');
+
+            script.src =
+                'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+            script.async = true;
+            script.defer = true;
+            script.dataset.payverifyTurnstile = 'true';
+
+            document.head.appendChild(script);
         }
 
-        const existingScript = document.querySelector(
-            'script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]',
-        );
-
-        if (existingScript) {
-            window.__payverifyTurnstileLoaded = () => {
+        pollerRef.current = window.setInterval(() => {
+            if (window.turnstile) {
                 setTurnstileReady(true);
-            };
-            return;
-        }
 
-        window.__payverifyTurnstileLoaded = () => {
-            setTurnstileReady(true);
-        };
-
-        const script = document.createElement('script');
-        script.src =
-            'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=__payverifyTurnstileLoaded&render=explicit';
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
+                if (pollerRef.current) {
+                    window.clearInterval(pollerRef.current);
+                    pollerRef.current = null;
+                }
+            }
+        }, 200);
 
         return () => {
-            delete window.__payverifyTurnstileLoaded;
+            if (pollerRef.current) {
+                window.clearInterval(pollerRef.current);
+                pollerRef.current = null;
+            }
         };
     }, []);
 
@@ -95,52 +75,50 @@ const LoginPage: React.FC = () => {
             !turnstileReady ||
             !TURNSTILE_SITE_KEY ||
             !window.turnstile ||
-            !turnstileContainer.current ||
-            widgetId.current
+            !captchaRef.current ||
+            widgetIdRef.current
         ) {
             return;
         }
 
-        widgetId.current = window.turnstile.render(turnstileContainer.current, {
+        widgetIdRef.current = window.turnstile.render(captchaRef.current, {
             sitekey: TURNSTILE_SITE_KEY,
             theme: 'dark',
+
             callback: (token: string) => {
                 setCaptchaToken(token);
                 setError(null);
             },
+
             'expired-callback': () => {
-                setCaptchaToken(null);
+                setCaptchaToken('');
             },
+
             'error-callback': () => {
-                setCaptchaToken(null);
+                setCaptchaToken('');
                 setError('Security verification failed. Please try again.');
             },
         });
 
         return () => {
-            if (widgetId.current && window.turnstile) {
-                window.turnstile.remove(widgetId.current);
-                widgetId.current = undefined;
+            if (widgetIdRef.current && window.turnstile) {
+                window.turnstile.remove?.(widgetIdRef.current);
+                widgetIdRef.current = null;
             }
         };
     }, [turnstileReady]);
 
-    const resetTurnstile = () => {
-        setCaptchaToken(null);
+    const resetCaptcha = () => {
+        setCaptchaToken('');
 
-        if (widgetId.current && window.turnstile) {
-            window.turnstile.reset(widgetId.current);
+        if (widgetIdRef.current && window.turnstile) {
+            window.turnstile.reset(widgetIdRef.current);
         }
     };
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         setError(null);
-
-        if (!TURNSTILE_SITE_KEY) {
-            setError('Security verification is not configured.');
-            return;
-        }
 
         if (!captchaToken) {
             setError('Please complete the security verification.');
@@ -150,18 +128,19 @@ const LoginPage: React.FC = () => {
         try {
             setSubmitting(true);
 
-            // This now sends the actual Turnstile token.
             await login(email.trim(), password, captchaToken);
 
             navigate(from, { replace: true });
         } catch (err: any) {
             console.error(err);
+
             setError(
                 err?.response?.data?.message ||
                 err?.message ||
                 'Login failed. Please check your credentials.',
             );
-            resetTurnstile();
+
+            resetCaptcha();
         } finally {
             setSubmitting(false);
         }
@@ -169,15 +148,17 @@ const LoginPage: React.FC = () => {
 
     return (
         <>
-            <div className="pv-auth-bg">
+            <div className="pv-login-page">
                 <div className="pv-login-card">
                     <h1>PayVerify Merchant Login</h1>
                     <p>Access your dashboard and tools.</p>
 
                     <form onSubmit={handleSubmit}>
                         <label htmlFor="email">Email</label>
+
                         <div className="pv-input">
                             <FontAwesomeIcon icon={faEnvelope} />
+
                             <input
                                 id="email"
                                 type="email"
@@ -190,8 +171,10 @@ const LoginPage: React.FC = () => {
                         </div>
 
                         <label htmlFor="password">Password</label>
+
                         <div className="pv-input">
                             <FontAwesomeIcon icon={faLock} />
+
                             <input
                                 id="password"
                                 type={showPassword ? 'text' : 'password'}
@@ -201,11 +184,11 @@ const LoginPage: React.FC = () => {
                                 autoComplete="current-password"
                                 required
                             />
+
                             <button
                                 type="button"
                                 className="pv-eye-button"
                                 onClick={() => setShowPassword((value) => !value)}
-                                aria-label={showPassword ? 'Hide password' : 'Show password'}
                             >
                                 <FontAwesomeIcon
                                     icon={showPassword ? faEyeSlash : faEye}
@@ -218,9 +201,8 @@ const LoginPage: React.FC = () => {
                         </div>
 
                         <div
-                            ref={turnstileContainer}
+                            ref={captchaRef}
                             className="pv-turnstile"
-                            aria-label="Security verification"
                         />
 
                         {error && <div className="pv-error">{error}</div>}
@@ -239,14 +221,14 @@ const LoginPage: React.FC = () => {
             </div>
 
             <style>{`
-        .pv-auth-bg {
+        .pv-login-page {
           min-height: 100vh;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 40px 16px;
           background:
-            radial-gradient(circle at top, rgba(45, 110, 255, .25), transparent 45%),
+            radial-gradient(circle at top, rgba(45,110,255,.25), transparent 45%),
             linear-gradient(160deg, #050914, #0c1930 60%, #102d55);
         }
 
@@ -257,7 +239,7 @@ const LoginPage: React.FC = () => {
           color: white;
           border: 1px solid rgba(255,255,255,.2);
           border-radius: 22px;
-          background: rgba(25, 34, 52, .82);
+          background: rgba(25,34,52,.86);
           box-shadow: 0 25px 80px rgba(0,0,0,.45);
           backdrop-filter: blur(16px);
         }
@@ -267,10 +249,9 @@ const LoginPage: React.FC = () => {
           text-align: center;
           font-size: 2.25rem;
           font-weight: 800;
-          color: #f3f7ff;
         }
 
-        .pv-login-card > p {
+        .pv-login-card p {
           margin: 10px 0 30px;
           text-align: center;
           color: #b9c5d9;
