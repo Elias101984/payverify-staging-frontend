@@ -17,6 +17,9 @@ RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
 
+# Include invoice PDF fonts in the production container
+COPY --from=build /app/src/assets/fonts ./src/assets/fonts
+
 ENV NODE_ENV=production
 ENV PORT=5000
 
