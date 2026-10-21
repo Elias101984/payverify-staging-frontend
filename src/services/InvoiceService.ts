@@ -2840,30 +2840,69 @@ export class InvoiceService {
             align: "center",
         });
 
-        doc.roundedRect(48, 126, contentWidth, 130, 14)
+        // Invoice details card
+        doc.roundedRect(48, 126, contentWidth, 152, 14)
             .fillAndStroke("#FFFFFF", "#DDE6F3");
-        doc.fillColor(ink).fontSize(18).text("INVOICE", 70, 149);
-        doc.fillColor(muted).fontSize(9).text("INVOICE NUMBER", 70, 181);
-        doc.fillColor(ink).fontSize(11).text(invoiceNumber, 70, 196);
-        doc.fillColor(muted).fontSize(9).text("PURCHASE ORDER", 255, 181);
-        doc.fillColor(ink).fontSize(11).text(po.poReference || `PO-${po.id}`, 255, 196);
-        doc.fillColor(muted).fontSize(9).text("ISSUED", 430, 181);
-        doc.fillColor(ink).fontSize(11).text(
-            new Date(invoiceRecord.issued_at).toLocaleDateString("en-NG", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-            }),
-            430,
-            196
-        );
-        doc.fillColor(muted).fontSize(9).text("CUSTOMER", 70, 218);
-        doc.fillColor(ink).fontSize(10).text(customerName, 70, 232, {
-            width: 450,
-            ellipsis: true,
-        });
 
-        let y = 294;
+        doc.fillColor(ink)
+            .fontSize(18)
+            .text("INVOICE", 70, 145);
+
+        // First row: Invoice number and issued date
+        doc.fillColor(muted)
+            .fontSize(9)
+            .text("INVOICE NUMBER", 70, 178);
+
+        doc.fillColor(ink)
+            .fontSize(11)
+            .text(invoiceNumber, 70, 193, {
+                width: 220,
+                lineBreak: false
+            });
+
+        doc.fillColor(muted)
+            .fontSize(9)
+            .text("ISSUED", 430, 178);
+
+        doc.fillColor(ink)
+            .fontSize(11)
+            .text(
+                new Date(invoiceRecord.issued_at).toLocaleDateString("en-NG", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric"
+                }),
+                430,
+                193,
+                { width: 110, lineBreak: false }
+            );
+
+        // Second row: Full purchase order reference
+        doc.fillColor(muted)
+            .fontSize(9)
+            .text("PURCHASE ORDER", 70, 216);
+
+        doc.fillColor(ink)
+            .fontSize(9)
+            .text(po.poReference || `PO-${po.id}`, 70, 229, {
+                width: 470,
+                lineBreak: false,
+                ellipsis: true
+            });
+
+        // Third row: Customer
+        doc.fillColor(muted)
+            .fontSize(9)
+            .text("CUSTOMER", 70, 248);
+
+        doc.fillColor(ink)
+            .fontSize(10)
+            .text(customerName, 70, 261, {
+                width: 470,
+                lineBreak: false,
+                ellipsis: true
+            });
+        let y = 310;
         doc.roundedRect(48, y, contentWidth, 34, 8).fill(light);
         doc.fillColor(muted).fontSize(9);
         doc.text("ITEM", 64, y + 12, { width: 240 });
