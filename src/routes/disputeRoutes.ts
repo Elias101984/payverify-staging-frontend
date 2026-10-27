@@ -1,19 +1,39 @@
-import { Router } from 'express';
-import {
-    createDispute,
-    listDisputesForTransaction,
-    updateDisputeStatus,
-} from '../controllers/disputeController';
+﻿import { Router } from 'express';
+import { listDisputesForTransaction } from '../controllers/disputeController';
 import { verifyJwtMiddleware } from '../middlewares/authMiddleware';
+import { authorizeRoles } from '../middlewares/roleMiddleware';
 
 const router = Router();
 
-// Full paths:
-//   POST /api/transactions/:transactionId/disputes
-//   GET  /api/transactions/:transactionId/disputes
-//   PATCH /api/disputes/:id
-router.post('/transactions/:transactionId/disputes', verifyJwtMiddleware, createDispute);
-router.get('/transactions/:transactionId/disputes', verifyJwtMiddleware, listDisputesForTransaction);
-router.patch('/disputes/:id', verifyJwtMiddleware, updateDisputeStatus);
+router.post(
+    '/transactions/:transactionId/disputes',
+    verifyJwtMiddleware,
+    (_req, res) => {
+        res.status(503).json({
+            success: false,
+            code: 'DISPUTE_ACTION_UNAVAILABLE',
+            message: 'Dispute creation is temporarily unavailable in PayVerify.',
+        });
+    }
+);
+
+router.get(
+    '/transactions/:transactionId/disputes',
+    verifyJwtMiddleware,
+    authorizeRoles(['admin']),
+    listDisputesForTransaction
+);
+
+router.patch(
+    '/disputes/:id',
+    verifyJwtMiddleware,
+    (_req, res) => {
+        res.status(503).json({
+            success: false,
+            code: 'DISPUTE_ACTION_UNAVAILABLE',
+            message: 'Dispute status changes are temporarily unavailable in PayVerify.',
+        });
+    }
+);
 
 export default router;
