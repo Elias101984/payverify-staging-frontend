@@ -1,4 +1,4 @@
-﻿// src/routes/merchantRoutes.ts
+// src/routes/merchantRoutes.ts
 import express from 'express';
 import {
     getAllMerchants,
@@ -7,6 +7,7 @@ import {
     createMerchant,
 } from '../controllers/merchantController';
 import { verifyJwtMiddleware } from '../middlewares/authMiddleware';
+import { authorizeRoles } from '../middlewares/roleMiddleware';
 
 const router = express.Router();
 
@@ -29,7 +30,7 @@ const router = express.Router();
  *       200:
  *         description: List of merchants
  */
-router.get('/', verifyJwtMiddleware, getAllMerchants);
+router.get('/', verifyJwtMiddleware, authorizeRoles(['admin']), getAllMerchants);
 
 /**
  * @swagger
@@ -81,7 +82,7 @@ router.get('/count', verifyJwtMiddleware, getMerchantCount); // ✅ keep BEFORE 
  *       404:
  *         description: Merchant not found
  */
-router.get('/:id', verifyJwtMiddleware, getMerchantById);
+router.get('/:id', verifyJwtMiddleware, authorizeRoles(['admin']), getMerchantById);
 
 /**
  * @swagger
@@ -114,6 +115,6 @@ router.get('/:id', verifyJwtMiddleware, getMerchantById);
  *       409:
  *         description: Duplicate CAC number
  */
-router.post('/', verifyJwtMiddleware, createMerchant);
+router.post('/', verifyJwtMiddleware, authorizeRoles(['admin']), createMerchant);
 
 export default router;

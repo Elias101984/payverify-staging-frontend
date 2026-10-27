@@ -1,8 +1,9 @@
-﻿import { Request, Response } from "express";
+import { Request, Response } from "express";
 
 import { PaymentIntentService } from "../services/PaymentIntentService";
 import { NotificationService } from "../services/NotificationService";
 import { PaystackService } from "../services/PaystackService";
+import { Merchant } from "../models/Merchant";
 
 /**
  * PaymentIntentController
@@ -203,12 +204,30 @@ export class PaymentIntentController {
                 return;
             }
 
+            const merchant = await Merchant.findByPk(Number(intent.merchant_id));
+            if (!merchant) {
+                res.status(404).json({
+                    success: false,
+                    message: "Merchant not found",
+                });
+                return;
+            }
+
+            if (!String(merchant.paystack_subaccount_code || "").trim()) {
+                res.status(409).json({
+                    success: false,
+                    message: "Merchant settlement subaccount not configured",
+                });
+                return;
+            }
+            // Do not initialize a platform-only Paystack transaction.
             const paystack = new PaystackService();
 
             const result = await paystack.initializeTransaction({
                 email,
                 amountNaira,
                 reference,
+                subaccount: merchant.paystack_subaccount_code,
             });
 
             res.json({

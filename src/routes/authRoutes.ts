@@ -1,4 +1,4 @@
-﻿// src/routes/authRoutes.ts
+// src/routes/authRoutes.ts
 
 import { Router } from 'express';
 
@@ -9,6 +9,8 @@ import {
     forgotPassword,
     resetPassword,
     changePassword,
+    verifyRegistrationEmail,
+    resendRegistrationOtp,
 } from '../controllers/authController';
 
 import {
@@ -322,4 +324,6 @@ router.post(
 );
 
 
+router.post('/verify-email', resetPasswordLimiter, verifyRegistrationEmail);
+router.post('/resend-email-otp', forgotPasswordLimiter, resendRegistrationOtp);
 export default router;

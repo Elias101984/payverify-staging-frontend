@@ -541,6 +541,124 @@ const Styles = () => (
             .pv-public-header { font-size: .82rem; }
             .pv-confirm-grid { grid-template-columns: 1fr; }
         }
+
+	        .pv-public-invoice,
+        .pv-public-invoice * {
+            box-sizing: border-box;
+        }
+
+        .pv-public-invoice {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .pv-public-header,
+        .pv-invoice-card {
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .pv-public-header {
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .pv-public-logo {
+            max-width: 100%;
+        }
+
+        .pv-invoice-heading > div,
+        .pv-verification > div:last-child,
+        .pv-line-item > div,
+        .pv-confirm-grid > div {
+            min-width: 0;
+        }
+
+        .pv-invoice-heading h1,
+        .pv-verification strong,
+        .pv-verification p,
+        .pv-verification small,
+        .pv-line-item strong,
+        .pv-line-item small,
+        .pv-confirm-grid strong,
+        .pv-confirm-grid small,
+        .pv-receipt-footer {
+            overflow-wrap: anywhere;
+        }
+
+        .pv-invoice-heading .badge {
+            flex-shrink: 0;
+            white-space: normal;
+            line-height: 1.4;
+        }
+
+        .pv-confirm-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .pv-public-invoice .form-control {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+            font-size: 16px;
+        }
+
+        .pv-pay-button {
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 560px) {
+            .pv-invoice-heading {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .pv-invoice-heading h1 {
+                font-size: clamp(1.1rem, 5vw, 1.45rem);
+            }
+
+            .pv-verification {
+                padding: 12px;
+                gap: 10px;
+            }
+
+            .pv-line-item {
+                flex-wrap: wrap;
+                gap: 6px 12px;
+            }
+
+            .pv-line-item > div {
+                flex: 1 1 160px;
+            }
+
+            .pv-line-item > span {
+                max-width: 100%;
+                margin-left: auto;
+                overflow-wrap: anywhere;
+                text-align: right;
+            }
+
+            .pv-total-row {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .pv-total-row strong {
+                max-width: 100%;
+                margin-left: auto;
+                overflow-wrap: anywhere;
+            }
+
+            .pv-confirm-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .pv-pay-button {
+                font-size: 1rem;
+                padding: 12px;
+            }
+        }
         @media print {
             @page { size:auto; margin:12mm; }
             body { background:#fff !important; }

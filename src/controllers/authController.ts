@@ -1,4 +1,4 @@
-﻿// src/controllers/authController.ts
+// src/controllers/authController.ts
 
 import { Request, Response } from 'express';
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
@@ -10,6 +10,8 @@ import sgMail from '@sendgrid/mail';
 import { sequelize } from '../config/db';
 import { User } from '../models/User';
 import { Merchant } from '../models/Merchant';
+import { issueChallenge, consumeChallenge, codeHash, constantMatch, newCode, audit, alertLogin } from '../services/authSecurityService';
+import { sendMail } from '../services/emailService';
 
 /* =========================================================================
  * Helpers
@@ -377,62 +379,40 @@ export const register = async (
 
         transactionFinished = true;
 
-        // ---------------------------------------------------------------------
-        // Issue JWT
-        // ---------------------------------------------------------------------
-
-        const token =
-            signJWT({
-                id:
-                    newUser.id,
-
-                email:
-                    newUser.email,
-
-                name:
-                    merchant.name,
-
-                role:
-                    newUser.role,
-            });
-
-        // ---------------------------------------------------------------------
-        // Welcome email
-        // ---------------------------------------------------------------------
-
-        const frontendUrl =
-            process.env.FRONTEND_URL ||
-            'http://localhost:3000';
-
-        void sendEmail(
-            email,
-            'Welcome to PayVerify',
-            `
-                <h1>Welcome to PayVerify!</h1>
-                <p>Your account has been created successfully.</p>
-                <p>
-                    <a href="${frontendUrl}/login">
-                        Log in
-                    </a>
-                    to get started.
-                </p>
-                <p>— The PayVerify Team</p>
-            `
-        );
-
-        return res.status(201).json({
-            message:
-                'User and merchant registered successfully',
-
-            token,
-        });
+        // Registration is NOT authentication. Email must be verified and admin must approve.
+        try {
+            const code = await issueChallenge(newUser.id, 'verify_email');
+            await sendMail(email, 'Verify your PayVerify email',
+                `<p>Your PayVerify verification code is <strong>${code}</strong>.</p><p>Expires in 10 minutes.</p>`);
+        } catch (deliveryError) {
+            console.error('Registration verification email failed', deliveryError);
+        }
+        await audit(req, 'REGISTRATION_PENDING', newUser.id, { merchantId: merchant.id });
+        return res.status(201).json({ message: 'Registration received. Verify your email, then await admin approval.', requiresEmailVerification: true });
     } catch (err) {
-        console.error(
-            'Registration failed:',
-            err instanceof Error
-                ? err.message
-                : 'Unknown registration error'
-        );
+        const failure = err as {
+            name?: string;
+            errors?: Array<{
+                path?: string;
+                type?: string;
+                validatorKey?: string;
+            }>;
+            parent?: {
+                code?: string;
+                constraint?: string;
+            };
+        };
+
+        console.error('Registration failed:', {
+            name: failure?.name,
+            fields: failure?.errors?.map(item => ({
+                field: item.path,
+                type: item.type,
+                validator: item.validatorKey,
+            })),
+            databaseCode: failure?.parent?.code,
+            constraint: failure?.parent?.constraint,
+        });
 
         if (
             !transactionFinished
@@ -443,7 +423,17 @@ export const register = async (
                 // Avoid masking original error.
             }
         }
+        if (failure?.name === 'SequelizeUniqueConstraintError') {
+            const duplicateCAC =
+                failure.errors?.some(item => item.path === 'cac_number') ||
+                failure.parent?.constraint === 'merchants_cac_number_unique';
 
+            return res.status(409).json({
+                message: duplicateCAC
+                    ? 'A business with this CAC/RC number is already registered. Please log in or contact support.'
+                    : 'An account with these details already exists.',
+            });
+        }
         return res.status(500).json({
             message:
                 'Server error during registration',
@@ -487,6 +477,7 @@ export const login = async (
 
         // Same response for unknown email and wrong password.
         if (!user) {
+            void audit(req, 'LOGIN_FAILURE');
             return res.status(401).json({
                 message:
                     'Invalid credentials',
@@ -500,6 +491,7 @@ export const login = async (
             );
 
         if (!validPassword) {
+            void audit(req, 'LOGIN_FAILURE', user.id);
             return res.status(401).json({
                 message:
                     'Invalid credentials',
@@ -514,6 +506,10 @@ export const login = async (
                 },
             });
 
+        if (user.role === 'merchant' && !user.email_verified_at) {
+            return res.status(403).json({ message: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
+        }
+        // Approved status is required for LIVE payment operations, not for viewing onboarding status.
         const merchantName =
             merchant?.name ||
             'Merchant';
@@ -531,8 +527,17 @@ export const login = async (
 
                 role:
                     user.role,
+                authVersion: user.auth_version || 0,
             });
 
+        void alertLogin(
+            req,
+            user.id,
+            user.email,
+            user.role.toLowerCase() === 'admin'
+                ? 'Admin'
+                : (merchant?.name || 'Merchant')
+        );
         return res.json({
             message:
                 'Login successful',
@@ -623,6 +628,9 @@ export const forgotPassword =
                     .randomBytes(32)
                     .toString('hex');
 
+            const resetOtp = newCode();
+            user.reset_otp_hash = codeHash(user.id, 'reset_password', resetOtp);
+            user.reset_otp_attempts = 0;
             user.resetTokenHash =
                 hashToken(
                     rawToken
@@ -631,7 +639,7 @@ export const forgotPassword =
             user.resetTokenExpires =
                 new Date(
                     Date.now() +
-                    60 *
+                    10 *
                     60 *
                     1000
                 );
@@ -664,7 +672,7 @@ export const forgotPassword =
                         <a href="${resetUrl}">
                             Click here to reset your password
                         </a>.
-                        This link expires in 1 hour.
+                        This link expires in 10 minutes.<br/>Your one-time code: <strong>${resetOtp}</strong>.
                     </p>
 
                     <p>
@@ -711,6 +719,7 @@ export const resetPassword =
 
         const password =
             req.body?.password;
+        const otp = String(req.body?.otp || '');
 
         if (
             !token ||
@@ -757,6 +766,16 @@ export const resetPassword =
                 });
             }
 
+            if (user.reset_otp_attempts !== undefined && user.reset_otp_attempts >= 5) {
+                return res.status(400).json({ message: 'Reset challenge expired or invalid' });
+            }
+            user.reset_otp_attempts = (user.reset_otp_attempts || 0) + 1;
+            if (!user.reset_otp_hash || !constantMatch(user.reset_otp_hash, codeHash(user.id, 'reset_password', otp))) {
+                await user.save({ validate: false });
+                return res.status(400).json({ message: 'Reset challenge expired or invalid' });
+            }
+            user.reset_otp_hash = null;
+            user.auth_version = (user.auth_version || 0) + 1;
             // User model hook hashes the password.
             user.password =
                 password;
@@ -768,7 +787,8 @@ export const resetPassword =
                 null;
 
             await user.save();
-
+            await audit(req, 'PASSWORD_RESET', user.id);
+            void sendMail(user.email, 'PayVerify password changed', '<p>Your PayVerify password was reset. If this was not you, contact support immediately.</p>').catch(console.error);
             return res.status(200).json({
                 message:
                     'Password has been reset successfully',
@@ -892,3 +912,128 @@ export const changePassword =
             });
         }
     };
+export const verifyRegistrationEmail = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const email = normalizeEmail(req.body?.email);
+        const code = String(req.body?.otp || '').trim();
+
+        if (!email || !/^\d{6}$/.test(code)) {
+            return res.status(400).json({
+                message: 'Enter your email and six-digit verification code.',
+            });
+        }
+
+        const user = await User.findOne({ where: { email } });
+
+        if (!user || user.email_verified_at) {
+            return res.status(400).json({
+                message: 'Invalid verification request. If already verified, please log in.',
+            });
+        }
+
+        const merchant = await Merchant.findOne({
+            where: { userId: user.id },
+        });
+
+        // Check signing configuration before consuming the code.
+        getJwtSecret();
+
+        const verified = await consumeChallenge(
+            user.id,
+            'verify_email',
+            code
+        );
+
+        if (!verified) {
+            return res.status(400).json({
+                message: 'Invalid or expired verification code.',
+            });
+        }
+
+        user.email_verified_at = new Date();
+
+        await user.save({
+            fields: ['email_verified_at'],
+            validate: false,
+            hooks: false,
+        });
+
+        const sessionUser = {
+            id: user.id,
+            email: user.email,
+            name: merchant?.name || 'Merchant',
+            role: user.role,
+        };
+
+        const token = signJWT({
+            ...sessionUser,
+            authVersion: user.auth_version || 0,
+        });
+
+        await audit(req, 'EMAIL_VERIFIED', user.id);
+        void alertLogin(
+            req,
+            user.id,
+            user.email,
+            user.role.toLowerCase() === 'admin'
+                ? 'Admin'
+                : (merchant?.name || 'Merchant')
+        );
+
+        return res.json({
+            message: 'Email verified successfully.',
+            token,
+            user: sessionUser,
+        });
+    } catch (error) {
+        console.error(
+            'Email verification failed:',
+            error instanceof Error ? error.message : 'Unknown error'
+        );
+
+        return res.status(500).json({
+            message: 'Unable to verify email. Please try again.',
+        });
+    }
+};
+
+
+export const resendRegistrationOtp = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const email = normalizeEmail(req.body?.email);
+
+        const user = await User.findOne({
+            where: { email },
+        });
+
+        if (user && !user.email_verified_at) {
+            const code = await issueChallenge(user.id, 'verify_email');
+
+            await sendMail(
+                user.email,
+                'PayVerify verification code',
+                `<p>Your new code: <strong>${code}</strong>.</p>
+                 <p>Expires in 10 minutes.</p>`
+            );
+        }
+
+        return res.json({
+            message: 'If verification is pending, a new code has been sent.',
+        });
+    } catch (error) {
+        console.error(
+            'OTP resend failed:',
+            error instanceof Error ? error.message : 'Unknown error'
+        );
+
+        return res.status(503).json({
+            message: 'Unable to send verification code. Please try again later.',
+        });
+    }
+};

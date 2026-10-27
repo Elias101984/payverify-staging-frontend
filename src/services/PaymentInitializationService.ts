@@ -62,44 +62,80 @@ export class PaymentInitializationService {
             throw new Error("Invoice public token is missing");
         }
 
-        // Resume the checkout already created for this unique order. This keeps
-        // one PurchaseOrder + one Invoice + one PaymentIntent while allowing the
-        // customer to return to an interrupted Paystack session.
-        if (
-            paymentIntent.gateway_authorization_url &&
-            paymentIntent.gateway_reference
-        ) {
-            const nextEmail =
-                receiptEmail ||
-                String(paymentIntent.customer_email || invoice.customer_email || "").trim() ||
-                null;
-            const nextPhone =
-                receiptPhone ||
-                String(paymentIntent.customer_phone || "").trim() ||
-                null;
+        // Settlement must be configured before starting or resuming checkout.
+        // Manual merchant approval is not required.
+        const paymentMerchant = await Merchant.findByPk(invoice.merchant_id);
 
-            await invoice.update({
-                customer_email: nextEmail,
-                status: "processing",
-            });
-
-            await paymentIntent.update({
-                customer_email: nextEmail,
-                customer_phone: nextPhone,
-            });
-
-            return {
-                reference: paymentIntent.gateway_reference,
-                authorization_url:
-                    paymentIntent.gateway_authorization_url,
-                access_code:
-                    paymentIntent.gateway_access_code || undefined,
-                resumed: true,
-            };
+        if (!paymentMerchant) {
+            throw new Error("Merchant not found");
         }
 
-        // Defense in depth:
-        // the invoice and PaymentIntent must belong to the same merchant.
+        if (!String(paymentMerchant.paystack_subaccount_code || "").trim()) {
+            throw new Error("Merchant settlement subaccount not configured");
+        }
+        // Check the previous attempt before reusing or replacing checkout.
+        if (paymentIntent.gateway_reference) {
+            if (
+                Number(invoice.merchant_id) !== Number(paymentIntent.merchant_id) ||
+                Math.round(Number(paymentIntent.amount) * 100) !==
+                Math.round(amountNaira * 100)
+            ) {
+                throw new Error("Payment ownership or amount mismatch");
+            }
+
+            // Verification errors stop checkout; never assume an unknown attempt failed.
+            const verified = await paystack.verifyTransaction(
+                paymentIntent.gateway_reference
+            );
+
+            if (
+                !verified.status ||
+                verified.data?.reference !== paymentIntent.gateway_reference ||
+                verified.data?.currency !== "NGN" ||
+                Number(verified.data?.amount) !== Math.round(amountNaira * 100)
+            ) {
+                throw new Error("Unable to confirm the previous payment attempt");
+            }
+
+            const previousStatus = String(
+                verified.data.status || ""
+            ).toLowerCase();
+
+            if (previousStatus === "success") {
+                throw new Error(
+                    "Payment already received. Refresh the invoice while confirmation completes."
+                );
+            }
+
+            if (["pending", "processing", "queued"].includes(previousStatus)) {
+                throw new Error(
+                    "Your previous payment is still processing. Please wait and refresh."
+                );
+            }
+
+            if (previousStatus === "ongoing") {
+                if (!paymentIntent.gateway_authorization_url) {
+                    throw new Error("Payment is ongoing. Please complete the existing checkout.");
+                }
+
+                return {
+                    reference: paymentIntent.gateway_reference,
+                    authorization_url: paymentIntent.gateway_authorization_url,
+                    access_code: paymentIntent.gateway_access_code || undefined,
+                    resumed: true,
+                };
+            }
+
+            if (!["failed", "abandoned"].includes(previousStatus)) {
+                throw new Error(
+                    "The previous payment needs review before another attempt can begin."
+                );
+            }
+
+            // A confirmed failed/abandoned attempt falls through to initialization
+            // below, creating a fresh reference for the same order and invoice.
+        }
+
         if (
             Number(invoice.merchant_id) !==
             Number(paymentIntent.merchant_id)

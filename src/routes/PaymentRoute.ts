@@ -1,29 +1,14 @@
-/*
-===============================================================================
-paymentRoutes.ts
-===============================================================================
-
-Handles Paystack payment initialization.
-
-===============================================================================
-*/
-
 import { Router } from "express";
-import { PaymentController } from"../controllers/paymentController";
 
 const router = Router();
 
-const controller =
-    new PaymentController();
-
-/*
-===============================================================================
-Initialize payment from PurchaseOrder / PaymentIntent
-===============================================================================
-*/
-router.post(
-    "/initialize",
-    controller.createPayment.bind(controller)
-);
+// Retired: payments must use the verified invoice checkout.
+router.post("/initialize", (_req, res) => {
+    res.status(410).json({
+        success: false,
+        code: "PAYMENT_ENDPOINT_RETIRED",
+        message: "Please open your invoice payment link to continue payment.",
+    });
+});
 
 export default router;

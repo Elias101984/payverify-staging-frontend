@@ -1,4 +1,4 @@
-﻿// src/models/User.ts
+// src/models/User.ts
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../config/db';
 import bcrypt from 'bcryptjs';
@@ -24,10 +24,14 @@ export interface UserAttributes {
     // ✅ new optional fields for password reset
     resetTokenHash?: string | null;
     resetTokenExpires?: Date | null;
+    email_verified_at?: Date | null;
+    reset_otp_hash?: string | null;
+    reset_otp_attempts?: number;
+    auth_version?: number;
 }
 
 export interface UserCreationAttributes
-    extends Optional<UserAttributes, 'id' | 'password_hash' | 'resetTokenHash' | 'resetTokenExpires'> { }
+    extends Optional<UserAttributes, 'id' | 'password_hash' | 'resetTokenHash' | 'resetTokenExpires' | 'email_verified_at' | 'reset_otp_hash' | 'reset_otp_attempts' | 'auth_version'> { }
 
 export class User
     extends Model<UserAttributes, UserCreationAttributes>
@@ -40,6 +44,10 @@ export class User
 
     public resetTokenHash?: string | null;
     public resetTokenExpires?: Date | null;
+    public email_verified_at?: Date | null;
+    public reset_otp_hash?: string | null;
+    public reset_otp_attempts?: number;
+    public auth_version?: number;
 
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
@@ -88,6 +96,10 @@ export const UserModel = User.init(
             allowNull: true,
         },
 
+        email_verified_at: { type: DataTypes.DATE, allowNull: true },
+        reset_otp_hash: { type: DataTypes.STRING(128), allowNull: true },
+        reset_otp_attempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        auth_version: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
         // VIRTUAL plain-text password input (never stored)
         password: {
             type: DataTypes.VIRTUAL,

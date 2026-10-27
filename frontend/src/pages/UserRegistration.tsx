@@ -426,14 +426,11 @@ const UserRegistration: React.FC = () => {
 
             setOk(true);
 
-            window.setTimeout(
-                () => {
-                    navigate(
-                        '/login'
-                    );
-                },
-                1200
-            );
+navigate(
+    `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+    { replace: true }
+);
+
         } catch (err: any) {
             console.error(
                 '[Registration] Registration failed',
@@ -927,7 +924,7 @@ const UserRegistration: React.FC = () => {
                                             className="alert alert-success mb-0"
                                             role="status"
                                         >
-                                            Account created! Redirecting to login…
+                                            Account created! Redirecting to email verification…
                                         </div>
                                     </div>
                                 )}

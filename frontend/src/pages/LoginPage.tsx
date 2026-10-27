@@ -193,7 +193,7 @@ const LoginPage: React.FC = () => {
 
                     <div className="pv-register-prompt">
                         <span>New merchant?</span>{' '}
-                        <Link to="/register">Register your business</Link>
+                        <Link to="/register-user">Register your business</Link>
                     </div>
 
                     <div ref={captchaRef} className="pv-turnstile" />

@@ -46,7 +46,7 @@ import InvoicePayPage from './pages/InvoicePayPage';
 
 import PurchaseOrderDetailsPage from './pages/PurchaseOrderDetailsPage';
 
-
+import VerifyEmailPage from './pages/VerifyEmailPage';
 
 // =============================================================================
 // APP
@@ -93,6 +93,7 @@ const App = () => {
                 {/* =============================================================
                    PUBLIC ROUTES
                 ============================================================= */}
+                <Route path="/verify-email" element={<VerifyEmailPage />} />
 
                 <Route
                     path="/login"

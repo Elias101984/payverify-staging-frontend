@@ -1,6 +1,11 @@
-﻿import React from 'react';
+﻿import React, { useEffect, useState } from 'react';
+import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
-type BankLite = { bankName?: string | null; accountNumberMasked?: string | null };
+type BankLite = {
+    bankName?: string | null;
+    accountNumberMasked?: string | null;
+};
 
 type Merchant = {
     id: number;
@@ -8,11 +13,9 @@ type Merchant = {
     email?: string | null;
     userId?: number | null;
     createdAt?: string | Date;
-    // 👇 NEW: support top-level fields from your merchants table
     bank_name?: string | null;
     account_number?: string | null;
-
-    // legacy/alt shape (if you ever attach related accounts to the response)
+    paystack_subaccount_code?: string | null;
     bankAccounts?: BankLite[];
 };
 
@@ -22,34 +25,88 @@ interface Props {
     onClose: () => void;
 }
 
-// Mask full account number → ****1234
 function maskAcct(raw?: string | null) {
     if (!raw) return '-';
-    const s = String(raw).replace(/\s/g, '');
-    return s.length <= 4 ? s : '****' + s.slice(-4);
+    const value = String(raw).replace(/\s/g, '');
+    return value.length <= 4 ? value : '****' + value.slice(-4);
 }
 
-const MerchantDetailsDrawer: React.FC<Props> = ({ open, merchant, onClose }) => {
+const MerchantDetailsDrawer: React.FC<Props> = ({
+    open,
+    merchant,
+    onClose,
+}) => {
+    const { user, token } = useAuth();
+    const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
+
+    const [subaccountCode, setSubaccountCode] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState('');
+    const [saveSucceeded, setSaveSucceeded] = useState(false);
+
+    useEffect(() => {
+        setSubaccountCode(merchant?.paystack_subaccount_code || '');
+        setMessage('');
+        setSaveSucceeded(false);
+    }, [merchant?.id, merchant?.paystack_subaccount_code, open]);
+
+    const saveSettlement = async (event: React.FormEvent) => {
+        event.preventDefault();
+
+        if (!merchant || !token || !isAdmin || saving) return;
+
+        const code = subaccountCode.trim();
+
+        if (!/^ACCT_[a-zA-Z0-9]+$/.test(code)) {
+            setSaveSucceeded(false);
+            setMessage('Enter a valid Paystack subaccount code beginning with ACCT_.');
+            return;
+        }
+
+        setSaving(true);
+        setMessage('');
+        setSaveSucceeded(false);
+
+        try {
+            const response = await api.put(
+                `/admin/merchants/${merchant.id}/settlement`,
+                { subaccountCode: code },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            setSubaccountCode(response.data.subaccountCode || code);
+            setSaveSucceeded(true);
+            setMessage(
+                response.data.message ||
+                'Settlement subaccount verified and saved.'
+            );
+            onClose();
+        } catch (error: any) {
+            setMessage(
+                error?.response?.data?.message ||
+                'Unable to save settlement setup.'
+            );
+        } finally {
+            setSaving(false);
+        }
+    };
+
     if (!open || !merchant) return null;
 
     const firstAcct = merchant.bankAccounts?.[0];
-
-    // 🔁 Prefer bankAccounts[0] if provided, otherwise fall back to top-level fields
     const bankName = firstAcct?.bankName ?? merchant.bank_name ?? '-';
     const acctMasked =
         firstAcct?.accountNumberMasked ??
-        (merchant.account_number ? maskAcct(merchant.account_number) : '-');
+        maskAcct(merchant.account_number);
 
-    const created =
-        merchant.createdAt
-            ? new Date(merchant.createdAt as any).toLocaleString()
-            : '-';
+    const created = merchant.createdAt
+        ? new Date(merchant.createdAt).toLocaleString()
+        : '-';
 
     return (
         <>
-            {/* backdrop */}
             <div
-                onClick={onClose}
+                onClick={saving ? undefined : onClose}
                 style={{
                     position: 'fixed',
                     inset: 0,
@@ -57,10 +114,11 @@ const MerchantDetailsDrawer: React.FC<Props> = ({ open, merchant, onClose }) => 
                     zIndex: 1070,
                 }}
             />
-            {/* drawer */}
+
             <div
                 role="dialog"
                 aria-modal="true"
+                aria-labelledby="merchant-details-title"
                 style={{
                     position: 'fixed',
                     top: 0,
@@ -69,9 +127,7 @@ const MerchantDetailsDrawer: React.FC<Props> = ({ open, merchant, onClose }) => 
                     maxWidth: '100vw',
                     height: '100vh',
                     background:
-                        'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
+                        'linear-gradient(180deg, #15243b, #091322)',
                     color: '#e9f2ff',
                     borderLeft: '1px solid rgba(255,255,255,0.15)',
                     boxShadow: '0 10px 24px rgba(0,0,0,0.45)',
@@ -82,60 +138,134 @@ const MerchantDetailsDrawer: React.FC<Props> = ({ open, merchant, onClose }) => 
             >
                 <div
                     className="p-3 d-flex justify-content-between align-items-center"
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}
+                    style={{
+                        borderBottom: '1px solid rgba(255,255,255,0.12)',
+                    }}
                 >
-                    <h5 className="mb-0">Merchant Details</h5>
-                    <button className="btn btn-outline-light btn-sm" onClick={onClose}>
+                    <h5 id="merchant-details-title" className="mb-0">
+                        Merchant Details
+                    </h5>
+                    <button
+                        type="button"
+                        className="btn btn-outline-light btn-sm"
+                        onClick={onClose}
+                        disabled={saving}
+                    >
                         Close
                     </button>
                 </div>
 
                 <div className="p-3" style={{ overflowY: 'auto' }}>
-                    <div className="mb-3">
-                        <div className="text-uppercase opacity-75" style={{ fontSize: '.8rem' }}>
-                            Name
-                        </div>
-                        <div style={{ fontWeight: 700 }}>{merchant.name ?? '-'}</div>
-                    </div>
+                    <Detail label="Name" value={merchant.name} />
+                    <Detail label="Email" value={merchant.email || '-'} />
+                    <Detail label="Merchant ID" value={`#${merchant.id}`} />
+                    <Detail label="Created" value={created} />
+                    <Detail label="Primary Bank" value={bankName} />
+                    <Detail label="Account" value={acctMasked} />
 
-                    <div className="mb-3">
-                        <div className="text-uppercase opacity-75" style={{ fontSize: '.8rem' }}>
-                            Email
+                    {isAdmin && merchant.paystack_subaccount_code && (
+                        <div className="alert alert-success mt-4" role="status">
+                            <strong>Settlement configured</strong>
+                            <div className="small mt-1">
+                                Linked code: {merchant.paystack_subaccount_code}
+                            </div>
+                            <div className="small">
+                                Bank: {bankName} · {acctMasked}
+                            </div>
                         </div>
-                        <div>{merchant.email ?? '-'}</div>
-                    </div>
+                    )}
 
-                    <div className="mb-3">
-                        <div className="text-uppercase opacity-75" style={{ fontSize: '.8rem' }}>
-                            Merchant ID
-                        </div>
-                        <div>#{merchant.id}</div>
-                    </div>
+                    {isAdmin && !merchant.paystack_subaccount_code && (
+                        <form
+                            onSubmit={saveSettlement}
+                            className="mt-4 border rounded p-3"
+                        >
+                            <h6>Settlement setup</h6>
 
-                    <div className="mb-3">
-                        <div className="text-uppercase opacity-75" style={{ fontSize: '.8rem' }}>
-                            Created
-                        </div>
-                        <div>{created}</div>
-                    </div>
+                            {merchant.paystack_subaccount_code ? (
+                                <div className="alert alert-success">
+                                    <strong>Settlement configured</strong>
+                                    <div className="small mt-1">
+                                        Linked code: {merchant.paystack_subaccount_code}
+                                    </div>
+                                    <div className="small">
+                                        Bank: {bankName} · {acctMasked}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="alert alert-warning">
+                                    Settlement not configured
+                                </div>
+                            )}
 
-                    <div className="mb-3">
-                        <div className="text-uppercase opacity-75" style={{ fontSize: '.8rem' }}>
-                            Primary Bank
-                        </div>
-                        <div>{bankName}</div>
-                    </div>
+                            <p className="small opacity-75">
+                                Enter the merchant’s existing Paystack subaccount
+                                code. Its bank details will be checked before saving.
+                            </p>
 
-                    <div className="mb-3">
-                        <div className="text-uppercase opacity-75" style={{ fontSize: '.8rem' }}>
-                            Account
-                        </div>
-                        <div>{acctMasked}</div>
-                    </div>
+                            <label
+                                htmlFor="merchant-subaccount"
+                                className="form-label"
+                            >
+                                Paystack subaccount code
+                            </label>
+
+                            <input
+                                id="merchant-subaccount"
+                                type="text"
+                                className="form-control mb-3"
+                                placeholder="ACCT_..."
+                                value={subaccountCode}
+                                onChange={event => {
+                                    setSubaccountCode(event.target.value);
+                                    setMessage('');
+                                    setSaveSucceeded(false);
+                                }}
+                                disabled={saving}
+                                autoComplete="off"
+                                spellCheck={false}
+                                required
+                            />
+
+                            <button
+                                type="submit"
+                                className="btn btn-primary w-100"
+                                disabled={saving || !subaccountCode.trim()}
+                            >
+                                {saving ? 'Verifying…' : 'Verify and save'}
+                            </button>
+
+                            {message && (
+                                <div
+                                    className={`alert ${saveSucceeded
+                                            ? 'alert-success'
+                                            : 'alert-danger'
+                                        } mt-3 mb-0`}
+                                    role={saveSucceeded ? 'status' : 'alert'}
+                                >
+                                    {message}
+                                </div>
+                            )}
+                        </form>
+                    )}
                 </div>
             </div>
         </>
     );
 };
+
+function Detail({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="mb-3">
+            <div
+                className="text-uppercase opacity-75"
+                style={{ fontSize: '.8rem' }}
+            >
+                {label}
+            </div>
+            <div style={{ overflowWrap: 'anywhere' }}>{value}</div>
+        </div>
+    );
+}
 
 export default MerchantDetailsDrawer;

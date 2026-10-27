@@ -584,7 +584,7 @@ const PurchaseOrdersModal: React.FC<PurchaseOrdersModalProps> = ({
                                 <tr key={po.id}>
 
                                     <td>
-                                        PO-{po.poNumber}
+                                        PO-{String(po.id).padStart(6, '0')}
                                     </td>
 
                                     {isAdmin && (

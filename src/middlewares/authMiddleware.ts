@@ -28,6 +28,7 @@ import {
 
 import { IncomingHttpHeaders } from 'http';
 import jwt from 'jsonwebtoken';
+import { User } from '../models/User';
 
 
 // ------------------------------------------------------------------------------------
@@ -55,11 +56,11 @@ export interface AuthenticatedRequest extends Request {
  *
  * Validates the JWT token and attaches the decoded payload to req.user.
  */
-export const verifyJwtMiddleware = (
+export const verifyJwtMiddleware = async (
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
-): void => {
+): Promise<void> => {
 
     try {
 
@@ -139,6 +140,11 @@ export const verifyJwtMiddleware = (
         // Attach decoded JWT payload to the request
         // ---------------------------------------------------------------------
 
+        const payload = decoded as any;
+        const currentUser = await User.findByPk(Number(payload.id));
+        if (!currentUser || payload.authVersion !== (currentUser.auth_version || 0)) {
+            res.status(401).json({message:'Session expired. Please log in again.'}); return;
+        }
         req.user = decoded;
 
 

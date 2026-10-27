@@ -15,33 +15,23 @@
 //   redundant `export { sendMail }` footer to avoid "Cannot redeclare" errors).
 // -----------------------------------------------------------------------------
 
-import sgMail, { MailDataRequired } from '@sendgrid/mail';
+import { Resend } from 'resend';
 import { Merchant } from '../models/Merchant';
 import { createAuditLog } from './auditService';
 
-// ---- SendGrid configuration --------------------------------------------------
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-const FROM_EMAIL =
-    process.env.NOTIFY_FROM_EMAIL || process.env.SENDGRID_FROM_EMAIL || 'no-reply@payverify.ng';
-const FROM_NAME = process.env.SENDGRID_FROM_NAME || 'PayVerify';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM_EMAIL = process.env.EMAIL_FROM || 'PayVerify <onboarding@resend.dev>';
 
-// NEW: Admin BCC list for silent copies (e.g., bank registration received)
 const ADMIN_BCC = (process.env.ADMIN_NOTIFY_EMAILS ?? '')
     .split(',')
     .map(x => x.trim())
     .filter(Boolean);
 
-if (!SENDGRID_API_KEY) {
-    // Don’t crash the server at boot; controller can still catch send failures.
-    console.warn('[emailService] SENDGRID_API_KEY is not set. Emails will not be sent.');
-} else {
-    sgMail.setApiKey(SENDGRID_API_KEY);
-}
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
-if (!process.env.NOTIFY_FROM_EMAIL && !process.env.SENDGRID_FROM_EMAIL) {
-    console.warn('[emailService] FROM email is not set (NOTIFY_FROM_EMAIL / SENDGRID_FROM_EMAIL).');
+if (!RESEND_API_KEY) {
+    console.warn('[emailService] RESEND_API_KEY is not configured.');
 }
-
 // ---- Types -------------------------------------------------------------------
 export type EmailExtras = {
     verifyUrl?: string;
@@ -71,49 +61,65 @@ function maskAccount(raw?: string | null): string {
  * Base sender for typical one-to-one emails.
  * NOTE: Exported exactly once to avoid TS2323 duplicate export errors.
  */
-export async function sendMail(to: string, subject: string, html: string) {
-    if (!SENDGRID_API_KEY) throw new Error('SENDGRID_API_KEY is not set');
-    const msg: MailDataRequired = {
-        to,
-        from: { email: FROM_EMAIL, name: FROM_NAME },
+export async function sendMail(
+    to: string,
+    subject: string,
+    html: string,
+    attachments: Array<{
+        filename: string;
+        content: Buffer;
+        contentId?: string;
+    }> = []
+): Promise<void> {
+    if (!resend) {
+        throw new Error('RESEND_API_KEY is not configured');
+    }
+
+    const recipient =
+        process.env.NODE_ENV === 'development'
+            ? (process.env.DEV_EMAIL_TO?.trim() || to)
+            : to;
+
+    const { data, error } = await resend.emails.send({
+        from: FROM_EMAIL,
+        to: recipient,
         subject,
         html,
-    };
-    await sgMail.send(msg);
+        ...(attachments.length ? { attachments } : {}),
+    });
+
+    if (error) {
+        throw new Error(`Resend delivery failed: ${error.message}`);
+    }
+
+    console.log('[emailService] Email accepted:', data?.id);
 }
 
-/**
- * NEW: Low-level sender that supports BCC via SendGrid personalizations.
- * - Keeps admin emails hidden from primary recipients.
- * - Internal helper; callers should prefer the higher-level wrappers.
- */
 async function sendMailWithBcc(
     to: string | string[],
     subject: string,
     html: string,
     bcc?: string[]
-) {
-    if (!SENDGRID_API_KEY) throw new Error('SENDGRID_API_KEY is not set');
+): Promise<void> {
+    if (!resend) throw new Error('RESEND_API_KEY is not configured');
 
-    const toArray = Array.isArray(to) ? to : [to];
-    const bccArray = (bcc ?? []).filter(Boolean);
+    const recipients = Array.isArray(to) ? to : [to];
+    const bccRecipients = (bcc ?? []).filter(Boolean);
 
-    const msg: MailDataRequired = {
-        from: { email: FROM_EMAIL, name: FROM_NAME },
+    const { data, error } = await resend.emails.send({
+        from: FROM_EMAIL,
+        to: recipients,
         subject,
         html,
-        // IMPORTANT: Use personalizations so BCCs are hidden from the "to" field.
-        personalizations: [
-            {
-                to: toArray.map(email => ({ email })),
-                ...(bccArray.length ? { bcc: bccArray.map(email => ({ email })) } : {}),
-            },
-        ],
-    };
+        ...(bccRecipients.length ? { bcc: bccRecipients } : {}),
+    });
 
-    await sgMail.send(msg);
+    if (error) {
+        throw new Error(`Resend BCC delivery failed: ${error.message}`);
+    }
+
+    console.log('[emailService] Email with BCC accepted:', data?.id);
 }
-
 // Build HTML for merchant QR email (unchanged)
 function buildMerchantQrHtml(params: {
     businessName: string;
@@ -390,6 +396,3 @@ export async function sendConfirmationEmailWithAdminBcc(
 
 // NOTE: Do NOT re-export `sendMail` at the bottom; it's already exported above.
 // export { sendMail }; // ❌ removing this avoids TS2323 "Cannot redeclare" errors.
-
-
-
