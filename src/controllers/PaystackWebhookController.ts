@@ -216,11 +216,25 @@ export class PaystackWebhookController {
             }
 
             const result = await this.reconciliation.reconcileInvoice(invoiceId, reference);
-            // NEW: Persist settlement_status/settlement_id when Paystack has
-            // already included this transaction in a settlement batch. If it
-            // is not settled yet, this records `pending`; dashboard polling
-            // will retry the reconciliation later.
-            await this.settlement.reconcile(result.intent);
+
+            if (!result.paid) {
+                console.warn(`Payment not yet verified as successful: ${reference}`);
+                return res.sendStatus(200);
+            }
+
+            // Payment confirmation and settlement are independent.
+            // Settlement API failures must not reverse verified payments.
+            try {
+                await this.settlement.reconcile(result.intent);
+            } catch (settlementError) {
+                console.error(
+                    "Settlement reconciliation deferred:",
+                    settlementError instanceof Error
+                        ? settlementError.message
+                        : "Unknown settlement error"
+                );
+            }
+
             console.info(`Payment verified and reconciled: ${reference}`);
             return res.sendStatus(200);
         } catch (error) {

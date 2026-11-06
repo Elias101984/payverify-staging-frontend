@@ -1,10 +1,11 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 
 import { PurchaseOrderService } from '../services/PurchaseOrderService';
 import { PaymentIntentService } from '../services/PaymentIntentService';
 import { Invoice } from '../models/Invoice';
 import { PaymentIntent } from '../models/PaymentIntent';
+import { CheckoutReservationService } from '../services/CheckoutReservationService';
 import Merchant from '../models/Merchant';
 import { Op } from 'sequelize';
 import { PaymentReconciliationService } from '../services/PaymentReconciliationService';
@@ -268,28 +269,8 @@ export class PurchaseOrderController {
                 }
             }
 
-            // Settlement is a separate Paystack lifecycle from charge.success.
-            // Reconcile paid intents while serving the dashboard list so the
-            // Settlement column can move from Awaiting settlement to Settled
-            // without requiring the merchant to open each order individually.
-            await Promise.all(
-                Array.from(latestIntentByOrder.values())
-                    .filter((intent) => intent.status === 'paid')
-                    .map(async (intent) => {
-                        try {
-                            await this.settlement.reconcile(intent);
-                        } catch (error) {
-                            console.warn(
-                                'Settlement reconciliation deferred for order',
-                                intent.purchase_order_id,
-                                error instanceof Error
-                                    ? error.message
-                                    : 'Unknown error'
-                            );
-                        }
-                    })
-            );
-
+            // Read the last known settlement state from the database.
+            // Paystack reconciliation must not block dashboard loading.
             const enrichedOrders = result.purchaseOrders.map((order: any) => {
                 const plainOrder = typeof order?.toJSON === 'function'
                     ? order.toJSON()
@@ -396,6 +377,7 @@ export class PurchaseOrderController {
             let paymentIntent = await PaymentIntent.findOne({
                 where: {
                     purchase_order_id: id,
+                    merchant_id: merchant.id,
                 },
                 order: [['createdAt', 'DESC']],
             });
@@ -739,67 +721,27 @@ export class PurchaseOrderController {
                 return;
             }
 
-            // Once Paystack checkout has started, cancellation is temporarily
-            // blocked to avoid a race where the customer pays a cancelled order.
-            // The merchant can refresh/verify the payment and then use the
-            // refund workflow if the charge completed.
-            const pendingPaymentIntent = status === 'cancelled'
-                ? await PaymentIntent.findOne({
-                    where: {
-                        purchase_order_id: id,
-                        merchant_id: merchant.id,
-                        status: 'pending',
-                    },
-                    order: [['createdAt', 'DESC']],
-                })
-                : null;
-
-            if (
-                status === 'cancelled' &&
-                pendingPaymentIntent?.payment_started_at
-            ) {
-                res.status(409).json({
-                    success: false,
-                    message:
-                        'Payment has already started for this order. Verify the payment result before cancelling; issue a refund if payment completed.',
-                });
-                return;
-            }
-
-            // This service method must use both id and merchantId in its query.
-            const purchaseOrder =
-                await this.purchaseOrderService.updatePurchaseOrderStatus(
-                    id,
-                    merchant.id,
-                    status
-                );
-
-            if (!purchaseOrder) {
-                res.status(404).json({
-                    success: false,
-                    message: 'Purchase order not found.',
-                });
-
-                return;
-            }
-
-            if (status === 'cancelled' && pendingPaymentIntent) {
-                await pendingPaymentIntent.update({ status: 'expired' });
-                await Invoice.update(
-                    { status: 'cancelled' },
-                    {
-                        where: {
-                            payment_intent_id: pendingPaymentIntent.id,
-                            merchant_id: merchant.id,
-                        },
+            if (status === 'cancelled') {
+                try {
+                    const outcome = await CheckoutReservationService.cancelUnstartedOrder(id, merchant.id);
+                    if (outcome === 'missing') {
+                        res.status(404).json({ success: false, message: 'Purchase order not found.' });
+                        return;
                     }
-                );
+                    const purchaseOrder = await this.purchaseOrderService.getPurchaseOrderById(id, merchant.id);
+                    res.status(200).json({ success: true, data: purchaseOrder });
+                    return;
+                } catch (error: any) {
+                    res.status(409).json({ success: false, message: error.message || 'Cancellation blocked.' });
+                    return;
+                }
             }
 
-            res.status(200).json({
-                success: true,
-                data: purchaseOrder,
+            res.status(409).json({
+                success: false,
+                message: 'Resetting an order to pending is temporarily unavailable.',
             });
+            return;
         } catch (error: any) {
             console.error('updatePurchaseOrderStatus error:', error);
 

@@ -1,4 +1,4 @@
-﻿// src/services/emailService.ts
+// src/services/emailService.ts
 // -----------------------------------------------------------------------------
 // Purpose
 // - Centralized SendGrid helpers for transactional emails.
@@ -75,15 +75,35 @@ export async function sendMail(
         throw new Error('RESEND_API_KEY is not configured');
     }
 
-    const recipient =
-        process.env.NODE_ENV === 'development'
+    // Redirect emails only in the isolated local test environment.
+    const localRedirectEnabled =
+        process.env.NODE_ENV === 'test' &&
+        process.env.LOCAL_EMAIL_REDIRECT_ENABLED === 'true' &&
+        process.env.DB_HOST === '127.0.0.1' &&
+        process.env.DB_NAME === 'payverify_refund_http_test' &&
+        !process.env.DATABASE_URL;
+
+    const redirectAddress =
+        process.env.LOCAL_EMAIL_REDIRECT_TO?.trim();
+
+    if (localRedirectEnabled && !redirectAddress) {
+        throw new Error('LOCAL_EMAIL_REDIRECT_TO is required');
+    }
+
+    const recipient = localRedirectEnabled
+        ? redirectAddress!
+        : process.env.NODE_ENV === 'development'
             ? (process.env.DEV_EMAIL_TO?.trim() || to)
             : to;
+
+    const deliverySubject = localRedirectEnabled
+        ? `[LOCAL TEST: ${to}] ${subject}`
+        : subject;
 
     const { data, error } = await resend.emails.send({
         from: FROM_EMAIL,
         to: recipient,
-        subject,
+        subject: deliverySubject,
         html,
         ...(attachments.length ? { attachments } : {}),
     });

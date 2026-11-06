@@ -8,6 +8,7 @@ import PurchaseOrder from '../models/PurchaseOrder';
 import Transaction from '../models/Transaction';
 import { sendInvoicePaidEmail } from './_emailService';
 import { PaystackService } from './PaystackService';
+import { VerifiedChargeRegistrationService } from './VerifiedChargeRegistrationService';
 import { sendPaidReceiptSms } from './SmsReceiptService';
 
 /**
@@ -17,6 +18,7 @@ import { sendPaidReceiptSms } from './SmsReceiptService';
  */
 export class PaymentReconciliationService {
     private readonly paystack = new PaystackService();
+    private readonly chargeRegistration = new VerifiedChargeRegistrationService();
 
     async reconcileInvoice(invoiceId: number, reference?: string) {
         const invoice = await Invoice.findByPk(invoiceId);
@@ -25,16 +27,19 @@ export class PaymentReconciliationService {
         const intent = await PaymentIntent.findByPk(invoice.payment_intent_id);
         if (!intent) throw new Error('Payment intent not found');
 
-        if (intent.status === 'paid' || invoice.status === 'paid') {
-            return { paid: true, transitioned: false, invoice, intent };
-        }
-
         const expectedReference =
             String(intent.gateway_reference || intent.token || '').trim();
-        const candidateReference = String(reference || expectedReference).trim();
+        const candidateReference = String(reference ?? expectedReference).trim();
 
-        if (!candidateReference || candidateReference !== expectedReference) {
+        if (!expectedReference || !candidateReference ||
+            candidateReference !== expectedReference) {
             throw new Error('Payment reference mismatch');
+        }
+
+        // Preserve the existing paid-state response.
+        // Historical paid charges require a separate verified backfill.
+        if (intent.status === 'paid' || invoice.status === 'paid') {
+            return { paid: true, transitioned: false, invoice, intent };
         }
 
         const verified = await this.paystack.verifyTransaction(candidateReference);
@@ -57,6 +62,11 @@ export class PaymentReconciliationService {
             throw new Error('Verified payment details do not match this invoice');
         }
 
+        const gatewayTransactionId = Number(verified.data.id);
+        if (!Number.isSafeInteger(gatewayTransactionId) || gatewayTransactionId <= 0) {
+            throw new Error('Verified Paystack transaction ID is missing or invalid');
+        }
+
         let transitioned = false;
         const paidAt = verified.data.paid_at
             ? new Date(verified.data.paid_at)
@@ -68,21 +78,61 @@ export class PaymentReconciliationService {
                 lock: dbTransaction.LOCK.UPDATE,
             });
             if (!lockedIntent) throw new Error('Payment intent disappeared');
-            if (lockedIntent.status === 'paid') return;
+            const alreadyPaid = lockedIntent.status === 'paid';
+            if (lockedIntent.gateway_reference !== candidateReference) {
+                throw new Error('Payment reference changed before reconciliation');
+            }
+
+            const order = await PurchaseOrder.findByPk(
+                lockedIntent.purchase_order_id,
+                { transaction: dbTransaction, lock: dbTransaction.LOCK.UPDATE }
+            );
+            const lockedInvoice = await Invoice.findByPk(invoice.id, {
+                transaction: dbTransaction,
+                lock: dbTransaction.LOCK.UPDATE,
+            });
+            if (
+                !lockedInvoice ||
+                lockedInvoice.payment_intent_id !== lockedIntent.id ||
+                Number(lockedInvoice.merchant_id) !== Number(lockedIntent.merchant_id) ||
+                Math.round(Number(lockedInvoice.amount) * 100) !== expectedKobo ||
+                Math.round(Number(lockedIntent.amount) * 100) !== expectedKobo
+            ) {
+                throw new Error('Invoice or payment ownership changed before reconciliation');
+            }
+            await this.chargeRegistration.register(
+                {
+                    paymentIntentId: lockedIntent.id,
+                    merchantId: Number(lockedIntent.merchant_id),
+                    reference: candidateReference,
+                    paystackTransactionId: gatewayTransactionId,
+                    amountKobo: expectedKobo,
+                    currency: verified.data.currency,
+                    verifiedAt: paidAt,
+                },
+                dbTransaction
+            );
+
+            if (alreadyPaid) return;
 
             transitioned = true;
             await lockedIntent.update(
                 { status: 'paid', paid_at: paidAt },
                 { transaction: dbTransaction }
             );
-            await invoice.update({ status: 'paid' }, { transaction: dbTransaction });
-
-            const order = await PurchaseOrder.findByPk(
-                lockedIntent.purchase_order_id,
-                { transaction: dbTransaction, lock: dbTransaction.LOCK.UPDATE }
-            );
+            await lockedInvoice.update(
+    {
+        status: 'paid',
+        amountPaid: Number(lockedInvoice.amount),
+        balanceDue: 0
+    },
+    { transaction: dbTransaction }
+);
             if (order) {
-                await order.update({ status: 'paid' }, { transaction: dbTransaction });
+                const currentOrderStatus = String(order.status || '').trim().toLowerCase();
+                if (currentOrderStatus !== 'cancelled') {
+                    await order.update({ status: 'paid' }, { transaction: dbTransaction });
+                }
             }
 
             const internalTransaction = await Transaction.findOne({

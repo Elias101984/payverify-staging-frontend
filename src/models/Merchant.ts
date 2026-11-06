@@ -1,4 +1,4 @@
-﻿
+
 
 //// src/models/Merchants.ts
 //// -----------------------------------------------------------------------------
@@ -321,8 +321,16 @@ Merchant.init(
             validate: { isIn: [['pending', 'approved', 'rejected']] },
             comment: 'Approval state for the merchant onboarding workflow',
         },
-        createdAt: '',
-        updatedAt: ''
+        createdAt: {
+            type: DataTypes.DATE,
+            allowNull: false,
+            defaultValue: DataTypes.NOW
+        },
+        updatedAt: {
+            type: DataTypes.DATE,
+            allowNull: false,
+            defaultValue: DataTypes.NOW
+        }
     },
     {
         sequelize,

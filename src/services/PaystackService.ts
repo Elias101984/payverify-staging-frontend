@@ -248,18 +248,18 @@ export class PaystackService {
         return res.data as PaystackSubaccountResponse;
     }
 
-    async listSettlements(subaccountId: number): Promise<any> {
+    async listSettlements(subaccountId: number, page: number = 1): Promise<any> {
         const res = await axios.get(`${this.baseUrl}/settlement`, {
             headers: this.headers,
-            params: { subaccount: subaccountId, perPage: 50 },
+            params: { subaccount: subaccountId, perPage: 50, page },
         });
         return res.data;
     }
 
-    async listSettlementTransactions(settlementId: number): Promise<any> {
+    async listSettlementTransactions(settlementId: number, page: number = 1): Promise<any> {
         const res = await axios.get(
             `${this.baseUrl}/settlement/${settlementId}/transactions`,
-            { headers: this.headers, params: { perPage: 100 } }
+            { headers: this.headers, params: { perPage: 100, page } }
         );
         return res.data;
     }

@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // Invoice Model (UPDATED — PAYSTACK + EMAIL READY)
 // =============================================================================
 // PURPOSE:
@@ -39,6 +39,8 @@ export interface InvoiceAttributes {
     merchant_id: number;
 
     amount: number;
+    amountPaid?: number;
+    balanceDue?: number;
 
     status: string;
 
@@ -87,6 +89,8 @@ export class Invoice
     public merchant_id!: number;
 
     public amount!: number;
+    public amountPaid?: number;
+    public balanceDue?: number;
 
     public status!: string;
 
@@ -125,6 +129,20 @@ Invoice.init({
     amount: {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: false
+    },
+
+    amountPaid: {
+        type: DataTypes.DECIMAL(15, 2),
+        field: 'amount_paid',
+        allowNull: false,
+        defaultValue: 0
+    },
+
+    balanceDue: {
+        type: DataTypes.DECIMAL(15, 2),
+        field: 'balance_due',
+        allowNull: false,
+        defaultValue: 0
     },
 
     status: {

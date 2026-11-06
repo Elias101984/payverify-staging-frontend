@@ -1,4 +1,4 @@
-﻿// src/pages/DashboardPage.tsx
+// src/pages/DashboardPage.tsx
 // -------------------------------------------------------------------------------------------------
 // PayVerify Dashboard (Dark Gloss / Glass Theme) + Merchants Tile (Modal) + Purchase Orders
 // -------------------------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ const isTokenExpired = (jwt: string): boolean => {
 };
 
 const isSettledStatus = (status: unknown) =>
-    ['success', 'settled', 'succeeded', 'completed'].includes(
+    ['success', 'settled'].includes(
         String(status || '').toLowerCase()
     );
 
@@ -135,6 +135,10 @@ const DashboardPage = () => {
     const [stats, setStats] = useState<BasicStats | null>(null);
     const [tiles, setTiles] = useState<Tiles | null>(null);
     const [loading, setLoading] = useState(true);
+
+    // Tracks active purchase-order and settlement-status refreshes.
+    const [settlementRefreshing, setSettlementRefreshing] = useState(false);
+    const settlementRefreshPromiseRef = useRef<Promise<boolean> | null>(null);
 
     // Purchase Orders state
     const [poStats, setPoStats] = useState<PurchaseOrdersStats | null>(null);
@@ -254,9 +258,16 @@ const DashboardPage = () => {
     // ---------------------------------------------------------
     // Fetch Purchase Orders Stats and Recent Orders
     // ---------------------------------------------------------
-    const fetchPurchaseOrdersStats = async () => {
-        if (!token) return;
-        try {
+    const fetchPurchaseOrdersStats = (): Promise<boolean> => {
+        if (!token) return Promise.resolve(false);
+        if (settlementRefreshPromiseRef.current) {
+            return settlementRefreshPromiseRef.current;
+        }
+
+        setSettlementRefreshing(true);
+
+        const request = (async (): Promise<boolean> => {
+            try {
             // Fetch PO stats - updated to match backend response structure
             const statsRes = await api.get('/purchase-orders/stats', {
                 headers: { Authorization: `Bearer ${token}` },
@@ -347,7 +358,7 @@ const DashboardPage = () => {
             const ordersArray = allOrdersData.data || allOrdersData;
             const normalizedOrders = Array.isArray(ordersArray) ? ordersArray : [];
 
-            const nextSettlementByOrder = new Map<string, boolean>();
+            const nextSettlementByOrder = new Map(previousSettlementByOrderRef.current);
             let newlySettledOrder: SettlementCelebrationOrder | null = null;
 
             normalizedOrders.forEach((order: any) => {
@@ -375,10 +386,7 @@ const DashboardPage = () => {
                 if (
                     settled &&
                     !newlySettledOrder &&
-                    // Show the celebration for an already-settled order on
-                    // initial browser load as well as for later transitions.
-                    ((!settlementBaselineReadyRef.current && wasSettled === undefined) ||
-                        (settlementBaselineReadyRef.current && wasSettled === false))
+                    settlementBaselineReadyRef.current && wasSettled === false
                 ) {
                     newlySettledOrder = {
                         id: order.id || orderId,
@@ -406,21 +414,23 @@ const DashboardPage = () => {
 
             setAllPurchaseOrders(normalizedOrders);
 
-        } catch (err) {
-            console.error('Failed to fetch purchase orders data:', err);
-            // Set default empty stats to prevent UI breakage
-            setPoStats({
-                totalOrders: 0,
-                pendingOrders: 0,
-                approvedOrders: 0,
-                rejectedOrders: 0,
-                completedOrders: 0,
-                totalAmount: 0,
-                pendingAmount: 0
-            });
-            setRecentPurchaseOrders([]);
-            setAllPurchaseOrders([]);
-        }
+                return true;
+            } catch (err) {
+                console.error('Failed to fetch purchase orders data:', err);
+                return false;
+            }
+        })();
+
+        settlementRefreshPromiseRef.current = request;
+
+        void request.finally(() => {
+            if (settlementRefreshPromiseRef.current === request) {
+                settlementRefreshPromiseRef.current = null;
+                setSettlementRefreshing(false);
+            }
+        });
+
+        return request;
     };
 
     const fetchOperations = async () => {
@@ -575,8 +585,12 @@ const DashboardPage = () => {
     // Refresh handler for purchase orders modal
     // -----------------------------
     const handleRefreshPurchaseOrders = async () => {
-        await fetchPurchaseOrdersStats();
-        toast.success('Purchase orders refreshed');
+        const refreshed = await fetchPurchaseOrdersStats();
+        if (refreshed) {
+            toast.success('Purchase orders refreshed');
+        } else {
+            toast.error('Failed to refresh purchase orders.');
+        }
     };
 
     // ADDED: Refresh function for after creating a new PO
@@ -767,11 +781,15 @@ const DashboardPage = () => {
             await fetchMerchantsCount();
 
             // Refresh purchase orders data
-            await fetchPurchaseOrdersStats();
+            const purchaseOrdersRefreshed = await fetchPurchaseOrdersStats();
 
             await fetchOperations();
 
-            toast.success('Dashboard refreshed');
+            if (purchaseOrdersRefreshed) {
+                toast.success('Dashboard refreshed');
+            } else {
+                toast.error('Dashboard partially refreshed. Purchase orders could not be updated.');
+            }
         } catch (err: any) {
             console.error(err);
             toast.error(err?.response?.data?.message ?? 'Failed to refresh dashboard.');
@@ -844,6 +862,12 @@ const DashboardPage = () => {
                                     </>
                                 )}
                             </div>
+                        {settlementRefreshing && (
+                            <div className="d-flex align-items-center gap-2 mt-2 text-info" role="status" aria-live="polite">
+                                <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+                                <small>Checking settlement status...</small>
+                            </div>
+                        )}
                         </div>
                         <div className="d-flex gap-2">
                             <button className="btn btn-outline-light btn-sm" onClick={handleManualRefresh}>

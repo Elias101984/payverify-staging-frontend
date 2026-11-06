@@ -1,10 +1,10 @@
 import crypto from "crypto";
 import { Invoice } from "../models/Invoice";
 import Merchant from "../models/Merchant";
-import Payment from "../models/Payment";
 import { PaymentIntent } from "../models/PaymentIntent";
-import Transaction from "../models/Transaction";
 import { PaystackService } from "./PaystackService";
+import { CheckoutReservationService } from "./CheckoutReservationService";
+import { sequelize } from "../config/db";
 
 const paystack = new PaystackService();
 
@@ -58,21 +58,36 @@ export class PaymentInitializationService {
             throw new Error("Payment already completed");
         }
 
+        if (
+            paymentIntent.status === "expired" ||
+            (paymentIntent.expires_at &&
+                new Date(paymentIntent.expires_at).getTime() <= Date.now())
+        ) {
+            throw new Error(
+                "This payment link has expired. Create a new order."
+            );
+        }
+
         if (!invoice.public_token) {
             throw new Error("Invoice public token is missing");
         }
 
         // Settlement must be configured before starting or resuming checkout.
-        // Manual merchant approval is not required.
+        // Admin approval is required before payment collection.
         const paymentMerchant = await Merchant.findByPk(invoice.merchant_id);
 
         if (!paymentMerchant) {
             throw new Error("Merchant not found");
         }
 
+        if (paymentMerchant.status !== "approved") {
+            throw new Error("Merchant is not approved for payment collection");
+        }
+
         if (!String(paymentMerchant.paystack_subaccount_code || "").trim()) {
             throw new Error("Merchant settlement subaccount not configured");
         }
+        let verifiedFailedReference: string | undefined;
         // Check the previous attempt before reusing or replacing checkout.
         if (paymentIntent.gateway_reference) {
             if (
@@ -132,8 +147,11 @@ export class PaymentInitializationService {
                 );
             }
 
-            // A confirmed failed/abandoned attempt falls through to initialization
-            // below, creating a fresh reference for the same order and invoice.
+            // Fail closed until every gateway attempt is tracked durably.
+            // Otherwise a late success for an older reference can be lost.
+            throw new Error(
+                "Automatic retry is temporarily unavailable. Contact support to verify the previous payment before creating a new order."
+            );
         }
 
         if (
@@ -165,11 +183,6 @@ export class PaymentInitializationService {
             throw new Error("Merchant not found");
         }
 
-        await invoice.update({
-            customer_email: receiptEmail || undefined,
-            status: "processing",
-        });
-
         // Paystack requires an email even when the customer chooses a printed
         // or SMS receipt. This address is used only for gateway initialization;
         // the optional customer address remains null in PayVerify.
@@ -184,21 +197,6 @@ export class PaymentInitializationService {
         // different so an order can safely resume without creating a new order.
         const reference =
             `PV_${invoice.id}_${crypto.randomBytes(10).toString("hex")}`;
-
-        const transaction = await Transaction.create({
-            amount: amountNaira,
-            status: "pending",
-            merchantId: invoice.merchant_id,
-            reference,
-        });
-
-        const payment = await Payment.create({
-            transactionId: transaction.id,
-            bankAccountId: null,
-            amount: amountNaira,
-            method: "paystack",
-            status: "initiated",
-        });
 
         const frontendUrl =
             String(
@@ -218,13 +216,20 @@ export class PaymentInitializationService {
         );
 
         if (platformFeeKobo >= expectedAmountKobo) {
-            await Promise.all([
-                transaction.update({ status: "failed" }),
-                payment.update({ status: "failed" }),
-                invoice.update({ status: "pending" }),
-            ]);
             throw new Error("Platform fee must be less than the invoice amount");
         }
+
+        // Atomic reservation also creates Transaction and Payment records.
+        // The gateway call is deliberately outside the DB transaction.
+        await CheckoutReservationService.reserveCheckout({
+            invoiceId: invoice.id,
+            paymentIntentId: paymentIntent.id,
+            reference,
+            customerEmail: receiptEmail,
+            customerPhone: receiptPhone,
+            verifiedFailedReference,
+            amountNaira,
+        });
 
         try {
             const response = await paystack.initializePayment({
@@ -248,15 +253,22 @@ export class PaymentInitializationService {
                     : {}),
             });
 
-            await paymentIntent.update({
-                customer_email: receiptEmail,
-                customer_phone: receiptPhone,
-                gateway_reference: reference,
-                gateway_authorization_url:
-                    response.data.authorization_url,
-                gateway_access_code:
-                    response.data.access_code,
-                payment_started_at: new Date(),
+            // A webhook can confirm payment while initialization is returning.
+            // Never overwrite a newer reference or a completed intent.
+            await sequelize.transaction(async (dbTransaction) => {
+                const lockedIntent = await PaymentIntent.findByPk(paymentIntent.id, {
+                    transaction: dbTransaction,
+                    lock: dbTransaction.LOCK.UPDATE,
+                });
+                if (!lockedIntent || lockedIntent.gateway_reference !== reference) {
+                    throw new Error("Checkout reference changed during initialization");
+                }
+                if (lockedIntent.status === "pending") {
+                    await lockedIntent.update({
+                        gateway_authorization_url: response.data.authorization_url,
+                        gateway_access_code: response.data.access_code,
+                    }, { transaction: dbTransaction });
+                }
             });
 
             return {
@@ -268,12 +280,8 @@ export class PaymentInitializationService {
                 resumed: false,
             };
         } catch (error) {
-            await Promise.all([
-                transaction.update({ status: "failed" }),
-                payment.update({ status: "failed" }),
-                invoice.update({ status: "pending" }),
-            ]);
-
+            // Initialization may have reached Paystack even if the request timed out.
+            // Keep reference, records, and processing state for verification.
             throw error;
         }
     }

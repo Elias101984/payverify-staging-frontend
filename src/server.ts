@@ -72,8 +72,8 @@ const startServer = async (): Promise<void> => {
         // ---------------------------------------------------------------------
 
         if (
-            (process.env.NODE_ENV || "development")
-            === "development"
+            process.env.NODE_ENV === "development" &&
+            process.env.ALLOW_DB_SYNC === "true"
         ) {
 
             await sequelize.sync();

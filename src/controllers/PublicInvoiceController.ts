@@ -6,13 +6,11 @@ import PurchaseOrder from "../models/PurchaseOrder";
 import { PurchaseOrderItem } from "../models/PurchaseOrderItem";
 import VerificationGatewayService from "../services/VerificationGatewayService";
 import { PaymentReconciliationService } from "../services/PaymentReconciliationService";
-import { SettlementReconciliationService } from "../services/SettlementReconciliationService";
 
 export class PublicInvoiceController {
     private readonly verificationGateway =
         new VerificationGatewayService();
     private readonly reconciliation = new PaymentReconciliationService();
-    private readonly settlement = new SettlementReconciliationService();
 
     async getPublicInvoiceStatus(req: Request, res: Response) {
         const token = String(req.params.token || "").trim();
@@ -51,13 +49,6 @@ export class PublicInvoiceController {
                 await Promise.all([invoice.reload(), paymentIntent.reload()]);
             } catch (error) {
                 console.warn('Payment status reconciliation deferred:',
-                    error instanceof Error ? error.message : 'Unknown error');
-            }
-        }
-        if (paymentIntent?.status === 'paid') {
-            try { await this.settlement.reconcile(paymentIntent); }
-            catch (error) {
-                console.warn('Settlement reconciliation deferred:',
                     error instanceof Error ? error.message : 'Unknown error');
             }
         }

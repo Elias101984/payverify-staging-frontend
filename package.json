@@ -19,9 +19,11 @@
     "@types/qrcode": "^1.5.5",
     "@types/sequelize": "^4.28.20",
     "@types/streamifier": "^0.1.2",
+    "@types/supertest": "^7.2.1",
     "@types/twilio": "^3.19.2",
     "@types/uuid": "^10.0.0",
     "cpx": "^1.5.0",
+    "supertest": "^7.3.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   },

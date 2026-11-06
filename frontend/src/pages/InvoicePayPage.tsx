@@ -329,7 +329,7 @@ export default function InvoicePayPage() {
                         <div>
                             <span>Settlement</span>
                             <strong>
-                                {payload.payment.settlementStatus === "success"
+                                {["success", "settled"].includes(String(payload.payment.settlementStatus || "").toLowerCase())
                                     ? "CONFIRMED"
                                     : "AWAITING PAYSTACK SETTLEMENT"}
                             </strong>

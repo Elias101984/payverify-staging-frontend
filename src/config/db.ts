@@ -1,4 +1,4 @@
-﻿///**
+///**
 // * Sequelize Database Configuration & Connection
 // *
 // * Reason: Centralized DB config keeps connection logic DRY and decoupled.
@@ -110,5 +110,6 @@ export const testConnection = async () => {
         console.log('✅ Database connection established successfully.');
     } catch (error) {
         console.error('❌ Unable to connect to the database:', error);
+        throw error;
     }
 };

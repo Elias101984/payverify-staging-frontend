@@ -1,4 +1,4 @@
-﻿// frontend/src/services/api.tsx
+// frontend/src/services/api.tsx
 
 import axios from 'axios';
 
@@ -298,6 +298,68 @@ export const getDisputes = (
 export const getFraudBreakdown = () =>
     api.get(
         '/analytics/fraud-breakdown'
+    );
+
+
+// =============================================================================
+// SECURE REFUND WORKFLOW — LOCAL TESTING ONLY
+// =============================================================================
+
+export type WorkflowRefundRequest = {
+    requestId: string;
+    chargeId: string;
+    merchantId: number;
+    amountKobo: string | number;
+    reason: string;
+    status: string;
+    requestedBy: number;
+    decidedBy: number | null;
+    createdAt: string;
+    decidedAt: string | null;
+    executionState: string | null;
+    attemptCount: number | null;
+    paymentReference: string;
+};
+
+export type WorkflowRefundListResponse = {
+    merchantId: number;
+    role: string;
+    refunds: WorkflowRefundRequest[];
+};
+
+export const listWorkflowRefundRequests = (merchantId: number) =>
+    api.get<WorkflowRefundListResponse>(
+        `/refund-workflow/merchants/${merchantId}/refund-requests`
+    );
+
+export const submitWorkflowRefundRequest = (
+    chargeId: string | number,
+    payload: {
+        amountKobo: number;
+        reason: string;
+        idempotencyKey: string;
+    }
+) =>
+    api.post(
+        `/refund-workflow/charges/${chargeId}/refund-requests`,
+        {
+            amountKobo: payload.amountKobo,
+            reason: payload.reason,
+        },
+        {
+            headers: {
+                'Idempotency-Key': payload.idempotencyKey,
+            },
+        }
+    );
+
+export const decideWorkflowRefundRequest = (
+    requestId: string | number,
+    decision: 'approve' | 'reject'
+) =>
+    api.post(
+        `/refund-workflow/refund-requests/${requestId}/decision`,
+        { decision }
     );
 
 export default api;
