@@ -73,16 +73,13 @@ export class PaymentInitializationService {
         }
 
         // Settlement must be configured before starting or resuming checkout.
-        // Admin approval is required before payment collection.
+        // Manual merchant approval is not required for payment initialization.
         const paymentMerchant = await Merchant.findByPk(invoice.merchant_id);
 
         if (!paymentMerchant) {
             throw new Error("Merchant not found");
         }
 
-        if (paymentMerchant.status !== "approved") {
-            throw new Error("Merchant is not approved for payment collection");
-        }
 
         if (!String(paymentMerchant.paystack_subaccount_code || "").trim()) {
             throw new Error("Merchant settlement subaccount not configured");

@@ -222,7 +222,7 @@ export default function InvoicePayPage() {
         if (!payload.verification.available || !payload.verification.verified) {
             toast.error(
                 payload.verification.message ||
-                "This merchant is not currently verified."
+                "Merchant registration could not be confirmed."
             );
             return;
         }
@@ -262,7 +262,7 @@ export default function InvoicePayPage() {
         return (
             <main className="pv-public-invoice pv-center">
                 <Spinner animation="border" variant="success" />
-                <p>Loading verified invoice…</p>
+                <p>Loading invoice…</p>
                 <Styles />
             </main>
         );
@@ -317,7 +317,7 @@ export default function InvoicePayPage() {
                     </p>
                     <div className="pv-receipt-number">Receipt PV-RCP-{payload.invoice.id}</div>
                     <div className="pv-confirm-grid">
-                        <div><span>Merchant</span><strong>{payload.verification.merchantName || "Verified merchant"}</strong></div>
+                        <div><span>Merchant</span><strong>{payload.verification.merchantName || "Merchant"}</strong></div>
                         <div><span>Order</span><strong>{payload.order?.reference || `#${payload.invoice.id}`}</strong></div>
                         <div><span>Customer</span><strong>{payload.order?.customerName || "Walk-in customer"}</strong></div>
                         <div><span>Amount</span><strong>{formatNaira(payload.invoice.amount)}</strong></div>
@@ -352,7 +352,7 @@ export default function InvoicePayPage() {
         <main className="pv-public-invoice">
             <header className="pv-public-header">
                 <img className="pv-public-logo" src={payVerifyLogo} alt="PayVerify" />
-                <span>Secure verified payment</span>
+                <span>Secure payment via Paystack</span>
             </header>
 
             <section className="pv-invoice-card">
@@ -377,21 +377,15 @@ export default function InvoicePayPage() {
                     <div>
                         <strong>
                             {payload.verification.verified
-                                ? "Merchant account verified by PayVerify"
-                                : "Merchant verification unavailable"}
+                                ? "Merchant registered with PayVerify"
+                                : "Merchant registration not confirmed"}
                         </strong>
                         <p>
-                            {payload.verification.merchantName || "Merchant"}
-                            {payload.verification.bankName
-                                ? ` · ${payload.verification.bankName}`
-                                : ""}
-                            {payload.verification.accountNumberMasked
-                                ? ` · ${payload.verification.accountNumberMasked}`
-                                : ""}
-                        </p>
-                        {payload.verification.accountName && (
-                            <small>Verified account name: {payload.verification.accountName}</small>
-                        )}
+    {payload.verification.merchantName || "Merchant"}
+</p>
+<small>
+    Registration confirmation does not verify bank account ownership or financial trustworthiness.
+</small>
                     </div>
                 </div>
 
@@ -426,7 +420,7 @@ export default function InvoicePayPage() {
                 {!payload.verification.verified && (
                     <div className="pv-payment-paused" role="alert">
                         {payload.verification.message ||
-                            "Payment is paused until PayVerify can verify this merchant."}
+                            "Payment is paused until PayVerify can confirm merchant registration."}
                     </div>
                 )}
 

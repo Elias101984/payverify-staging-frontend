@@ -1,4 +1,4 @@
-﻿// frontend/src/services/paymentVerificationService.ts
+// frontend/src/services/paymentVerificationService.ts
 // =============================================================================
 // Payment Verification Service
 //
@@ -54,7 +54,7 @@ export interface PaymentStartResponse {
 
     accountNumberMasked: string;
 
-    trustScore: number;
+    trustScore: number | null;
 
     verificationStatus: string | null;
 

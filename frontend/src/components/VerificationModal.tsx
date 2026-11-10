@@ -1,4 +1,4 @@
-﻿
+
 import React, { useEffect, useState } from "react";
 import { Modal, Button, Form, Badge, Spinner } from "react-bootstrap";
 
@@ -15,7 +15,7 @@ export interface VerificationResult {
 
     accountNumberMasked?: string;
 
-    trustScore?: number;
+    trustScore?: number | null;
 
     verificationStatus?: string | null;
 
@@ -60,6 +60,7 @@ const VerificationModal: React.FC<Props> = ({
     if (!verification) return null;
 
     const continueClicked = async () => {
+        if (!verification.verified || !acknowledged || loading) return;
 
         await onContinue(
             !verification.verified
@@ -82,14 +83,19 @@ const VerificationModal: React.FC<Props> = ({
                 <Modal.Title>
 
                     {verification.verified
-                        ? "✅ Verified by PayVerify"
-                        : "⚠ Merchant Not Verified"}
+                        ? "✅ Merchant Registered with PayVerify"
+                        : "⚠ Merchant Not Registered"}
 
                 </Modal.Title>
 
             </Modal.Header>
 
             <Modal.Body>
+                {verification.verified && (
+                    <div className="alert alert-info">
+                        PayVerify confirms merchant registration only. This check does not establish bank ownership or financial trustworthiness.
+                    </div>
+                )}
 
                 {verification.verified ? (
 
@@ -100,50 +106,6 @@ const VerificationModal: React.FC<Props> = ({
                             <tr>
                                 <th>Merchant</th>
                                 <td>{verification.merchantName}</td>
-                            </tr>
-
-                            <tr>
-                                <th>Bank</th>
-                                <td>{verification.bankName}</td>
-                            </tr>
-
-                            <tr>
-                                <th>Account</th>
-                                <td>{verification.accountNumberMasked}</td>
-                            </tr>
-
-                            <tr>
-                                <th>Trust Score</th>
-                                <td>
-
-                                    <Badge bg="success">
-
-                                        {verification.trustScore}
-
-                                    </Badge>
-
-                                </td>
-
-                            </tr>
-
-                            <tr>
-                                <th>Verification Count</th>
-                                <td>{verification.verificationCount}</td>
-                            </tr>
-
-                            <tr>
-                                <th>Status</th>
-
-                                <td>
-
-                                    <Badge bg="primary">
-
-                                        {verification.verificationBadge}
-
-                                    </Badge>
-
-                                </td>
-
                             </tr>
 
                         </tbody>
@@ -168,7 +130,7 @@ const VerificationModal: React.FC<Props> = ({
 
                         <strong>
 
-                            Proceed with caution.
+                            Payment cannot continue because this merchant is not registered.
 
                         </strong>
 
@@ -191,7 +153,7 @@ const VerificationModal: React.FC<Props> = ({
                     label={
                         verification.verified
                             ? "I have reviewed the merchant verification information."
-                            : "I understand this merchant is NOT registered with PayVerify and wish to continue."
+                            : "This merchant is not registered with PayVerify."
                     }
 
                 />
@@ -224,7 +186,7 @@ const VerificationModal: React.FC<Props> = ({
 
                     disabled={
                         !acknowledged ||
-                        loading
+                        loading || !verification.verified
                     }
 
                     onClick={continueClicked}
