@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 
 import { Invoice } from "../models/Invoice";
+import { Merchant } from "../models/Merchant";
 import { PaymentIntent } from "../models/PaymentIntent";
 import PurchaseOrder from "../models/PurchaseOrder";
 import { PurchaseOrderItem } from "../models/PurchaseOrderItem";
@@ -97,6 +98,9 @@ export class PublicInvoiceController {
                 });
             }
 
+            const merchant = await Merchant.findByPk(invoice.merchant_id, {
+                attributes: ["name"],
+            });
             const purchaseOrder = await PurchaseOrder.findByPk(
                 paymentIntent.purchase_order_id
             );
@@ -200,6 +204,9 @@ export class PublicInvoiceController {
                         })),
                     }
                     : null,
+                merchant: {
+                    name: merchant?.name || null,
+                },
                 verification,
             });
         } catch (error) {

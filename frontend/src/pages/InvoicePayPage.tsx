@@ -44,6 +44,9 @@ type PublicInvoicePayload = {
             lineTotal: number;
         }>;
     } | null;
+    merchant?: {
+        name: string | null;
+    };
     verification: {
         available: boolean;
         verified: boolean;
@@ -169,7 +172,14 @@ export default function InvoicePayPage() {
         if (!shouldConfirm) return;
 
         let attempts = 0;
+        let requestInFlight = false;
+        let confirmationHandled = false;
+        let active = true;
+
         const timer = window.setInterval(async () => {
+            if (!active || requestInFlight || confirmationHandled) return;
+
+            requestInFlight = true;
             attempts += 1;
 
             try {
@@ -181,6 +191,12 @@ export default function InvoicePayPage() {
                     `/public/invoices/${encodeURIComponent(invoiceToken)}/status`
                 );
 
+                const confirmedPaid =
+                    String(response.data.invoiceStatus).toLowerCase() === "paid" ||
+                    String(response.data.paymentStatus).toLowerCase() === "paid";
+
+                // Preserve the confirmed payment status immediately, even if
+                // the subsequent full receipt refresh cannot be completed.
                 setPayload((current) =>
                     current
                         ? {
@@ -197,8 +213,20 @@ export default function InvoicePayPage() {
                         }
                         : current
                 );
+
+                if (confirmedPaid && active && !confirmationHandled) {
+                    confirmationHandled = true;
+                    window.clearInterval(timer);
+
+                    // Refresh complete receipt details once payment is confirmed.
+                    await loadInvoice(true);
+                }
             } catch (pollError) {
-                console.error("Payment status poll failed:", pollError);
+                if (active) {
+                    console.error("Payment status poll failed:", pollError);
+                }
+            } finally {
+                requestInFlight = false;
             }
 
             if (attempts >= 24) {
@@ -206,8 +234,11 @@ export default function InvoicePayPage() {
             }
         }, 2500);
 
-        return () => window.clearInterval(timer);
-    }, [invoiceToken, shouldConfirm]);
+        return () => {
+            active = false;
+            window.clearInterval(timer);
+        };
+    }, [invoiceToken, shouldConfirm, loadInvoice]);
 
     const handlePay = async () => {
         if (!payload?.invoice.id) return;
@@ -313,13 +344,13 @@ export default function InvoicePayPage() {
                     </div>
                     <h1>Payment confirmed</h1>
                     <p>
-                        Your payment to {payload.verification.merchantName || "the merchant"} has been verified.
+                        Your payment to {payload.merchant?.name || payload.verification.merchantName || "the merchant"} has been verified.
                     </p>
                     <div className="pv-receipt-number">Receipt PV-RCP-{payload.invoice.id}</div>
                     <div className="pv-confirm-grid">
-                        <div><span>Merchant</span><strong>{payload.verification.merchantName || "Merchant"}</strong></div>
+                        <div><span>Merchant</span><strong>{payload.merchant?.name || payload.verification.merchantName || "Merchant"}</strong></div>
                         <div><span>Order</span><strong>{payload.order?.reference || `#${payload.invoice.id}`}</strong></div>
-                        <div><span>Customer</span><strong>{payload.order?.customerName || "Walk-in customer"}</strong></div>
+                        <div><span>Customer</span><strong>{payload.order?.customerName || payload.payment.customerName || "Walk-in customer"}</strong></div>
                         <div><span>Amount</span><strong>{formatNaira(payload.invoice.amount)}</strong></div>
                         <div><span>Payment</span><strong>PAID</strong></div>
                         <div><span>Paid on</span><strong>{payload.payment.paidAt ? new Date(payload.payment.paidAt).toLocaleString("en-NG") : "Confirmed"}</strong></div>
@@ -341,6 +372,11 @@ export default function InvoicePayPage() {
                     <Button className="mt-4 pv-print-button" variant="outline-light" onClick={() => window.print()}>
                         Print receipt
                     </Button>
+                    <div className="pv-receipt-actions">
+                        <a href="/" className="pv-return-button">
+                            Return to PayVerify
+                        </a>
+                    </div>
                     <p className="pv-receipt-footer">Powered by PayVerify • Secure merchant verification and payment</p>
                 </section>
                 <Styles />
@@ -381,7 +417,7 @@ export default function InvoicePayPage() {
                                 : "Merchant registration not confirmed"}
                         </strong>
                         <p>
-    {payload.verification.merchantName || "Merchant"}
+    {payload.merchant?.name || payload.verification.merchantName || "Merchant"}
 </p>
 <small>
     Registration confirmation does not verify bank account ownership or financial trustworthiness.
@@ -393,7 +429,7 @@ export default function InvoicePayPage() {
                     <h2>Invoice summary</h2>
                     <div className="pv-customer-summary">
                         <span>Customer</span>
-                        <strong>{payload.order?.customerName || "Walk-in customer"}</strong>
+                        <strong>{payload.order?.customerName || payload.payment.customerName || "Walk-in customer"}</strong>
                     </div>
                     {payload.order?.items?.length ? (
                         payload.order.items.map((item) => (
@@ -522,6 +558,27 @@ const Styles = () => (
         .pv-receipt-brand span { font-size:.74rem; color:#91a79a; text-transform:uppercase; letter-spacing:.08em; }
         .pv-receipt-number { display:inline-block; margin:8px 0 14px; padding:7px 12px; border:1px solid rgba(103,220,156,.28); border-radius:999px; color:#9de6bc; background:rgba(39,190,105,.09); font-size:.78rem; }
         .pv-reference { overflow-wrap:anywhere; font-size:.78rem; }
+        .pv-receipt-actions {
+            display: flex;
+            justify-content: center;
+            margin-top: 16px;
+        }
+        .pv-return-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            padding: 11px 18px;
+            border-radius: 10px;
+            background: #1d6146;
+            color: #ffffff;
+            font-weight: 700;
+            text-decoration: none;
+        }
+        .pv-return-button:hover {
+            background: #247a56;
+            color: #ffffff;
+        }
         .pv-receipt-footer { margin:18px 0 0 !important; font-size:.72rem; color:#789080 !important; }
         .pv-success-icon { width: 70px; height: 70px; display: grid; place-items: center; margin: 0 auto 16px; border-radius: 50%; background: rgba(46, 204, 113, .16); color: #67dc9c; font-size: 2rem; }
         .pv-confirmation h1 { margin: 10px 0 8px; }
@@ -665,6 +722,7 @@ const Styles = () => (
             .pv-confirm-grid div { border:1px solid #e3eaf2; color:#132238; background:#f7f9fc !important; }
             .pv-success-icon { color:#148457; border:1px solid #b9e8d2; background:#eefaf4 !important; }
             .pv-print-button { display:none !important; }
+            .pv-receipt-actions { display:none !important; }
             .pv-receipt-number { color:#148457; border-color:#b9e8d2; background:#eefaf4 !important; }
         }
     `}</style>
