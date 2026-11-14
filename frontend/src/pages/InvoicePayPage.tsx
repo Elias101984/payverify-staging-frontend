@@ -373,7 +373,7 @@ export default function InvoicePayPage() {
                         Print receipt
                     </Button>
                     <div className="pv-receipt-actions">
-                        <a href="/" className="pv-return-button">
+                        <a href="/dashboard" className="pv-return-button">
                             Return to PayVerify
                         </a>
                     </div>
