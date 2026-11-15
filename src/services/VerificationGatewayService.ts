@@ -70,7 +70,18 @@ export class VerificationGatewayService {
             if (axiosError?.response) {
                 const headers = axiosError.response.headers;
 
+                const responseBody = axiosError.response.data;
+                const htmlExcerpt =
+                    status === 429 && typeof responseBody === "string"
+                        ? responseBody
+                            .replace(/<[^>]*>/g, " ")
+                            .replace(/\s+/g, " ")
+                            .trim()
+                            .slice(0, 500)
+                        : undefined;
+
                 console.error("Verification API HTTP failure", {
+                    htmlExcerpt,
                     merchantId,
                     status,
                     contentType: headers["content-type"],
