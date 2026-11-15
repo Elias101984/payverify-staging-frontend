@@ -67,6 +67,22 @@ export class VerificationGatewayService {
             const axiosError = axios.isAxiosError(error) ? error : null;
             const status = axiosError?.response?.status;
 
+            if (axiosError?.response) {
+                const headers = axiosError.response.headers;
+
+                console.error("Verification API HTTP failure", {
+                    merchantId,
+                    status,
+                    contentType: headers["content-type"],
+                    server: headers["server"],
+                    retryAfter: headers["retry-after"],
+                    cfRay: headers["cf-ray"],
+                    renderRequestId: headers["rndr-id"],
+                    rateLimit: headers["ratelimit-limit"],
+                    rateLimitRemaining: headers["ratelimit-remaining"],
+                });
+            }
+
             const isNetworkFailure =
                 Boolean(axiosError) && !axiosError?.response;
 
