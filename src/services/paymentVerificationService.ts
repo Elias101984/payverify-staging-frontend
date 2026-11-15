@@ -61,7 +61,7 @@ if (!VERIFICATION_API_URL) {
 // =============================================================================
 
 const verificationApi = axios.create({
-    baseURL: VERIFICATION_API_URL,
+    baseURL: VERIFICATION_API_URL?.replace(/\/api\/v1$/, ""),
     headers: {
         "Content-Type": "application/json",
     },
