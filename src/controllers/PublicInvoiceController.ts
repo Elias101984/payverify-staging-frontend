@@ -6,12 +6,10 @@ import { PaymentIntent } from "../models/PaymentIntent";
 import PurchaseOrder from "../models/PurchaseOrder";
 import { PurchaseOrderItem } from "../models/PurchaseOrderItem";
 import VerificationGatewayService from "../services/VerificationGatewayService";
-import { PaymentReconciliationService } from "../services/PaymentReconciliationService";
 
 export class PublicInvoiceController {
     private readonly verificationGateway =
         new VerificationGatewayService();
-    private readonly reconciliation = new PaymentReconciliationService();
 
     async getPublicInvoiceStatus(req: Request, res: Response) {
         const token = String(req.params.token || "").trim();
@@ -33,26 +31,15 @@ export class PublicInvoiceController {
             });
         }
 
-        let paymentIntent = await PaymentIntent.findByPk(
+        // Status reads must never initiate a Paystack API request. The signed
+        // Paystack webhook updates the database; recovery belongs in a bounded
+        // server-side reconciliation job, not a public GET endpoint.
+        const paymentIntent = await PaymentIntent.findByPk(
             invoice.payment_intent_id,
-            { attributes: ["id", "status", "paid_at", "gateway_reference"] }
+            { attributes: ["id", "status", "paid_at"] }
         );
 
-        // Paystack cannot call a localhost webhook. A public-token holder may
-        // trigger a server-to-server verification, but can never choose the
-        // amount, merchant, invoice or trusted reference.
-        if (paymentIntent?.status !== 'paid' && paymentIntent?.gateway_reference) {
-            try {
-                await this.reconciliation.reconcileInvoice(
-                    invoice.id,
-                    paymentIntent.gateway_reference
-                );
-                await Promise.all([invoice.reload(), paymentIntent.reload()]);
-            } catch (error) {
-                console.warn('Payment status reconciliation deferred:',
-                    error instanceof Error ? error.message : 'Unknown error');
-            }
-        }
+        res.setHeader("Cache-Control", "no-store");
 
         return res.json({
             invoiceStatus: invoice.status,

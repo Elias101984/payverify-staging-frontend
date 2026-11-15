@@ -165,9 +165,8 @@ export default function InvoicePayPage() {
             new URLSearchParams(window.location.search).has("reference") ||
             new URLSearchParams(window.location.search).has("trxref"));
 
-    // Paystack redirects the browser before the webhook is guaranteed to have
-    // reached Render. Poll the public invoice briefly so the confirmation page
-    // changes to PAID automatically when the verified webhook completes.
+    // Webhooks update the database. Check that state only a few times after
+    // checkout; never initiate Paystack verification from a status GET.
     useEffect(() => {
         if (!shouldConfirm) return;
 
@@ -177,7 +176,7 @@ export default function InvoicePayPage() {
         let active = true;
 
         const timer = window.setInterval(async () => {
-            if (!active || requestInFlight || confirmationHandled) return;
+            if (!active || requestInFlight || confirmationHandled || document.visibilityState !== "visible") return;
 
             requestInFlight = true;
             attempts += 1;
@@ -229,10 +228,10 @@ export default function InvoicePayPage() {
                 requestInFlight = false;
             }
 
-            if (attempts >= 24) {
+            if (attempts >= 6) {
                 window.clearInterval(timer);
             }
-        }, 2500);
+        }, 10000);
 
         return () => {
             active = false;
